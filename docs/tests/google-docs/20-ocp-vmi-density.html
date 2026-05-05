@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 20: OCP VMI Density — How Many VMs Can Boot at Once?</title>
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+  </style>
+</head>
+<body>
+<h1>Test 20: OCP VMI Density — How Many VMs Can Boot at Once?</h1>
+<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐⭐ Advanced</div>
+<div class="note"><strong>Time to run:</strong> ~15–20 minutes</div>
+<div class="note"><strong>What it does:</strong> Creates N VirtualMachineInstances simultaneously and measures KubeVirt control-plane boot latency</div>
+<div class="note"><strong>Requires:</strong> OpenShift Virtualization 4.x, multi-node cluster</div>
+<hr>
+<h2>What is this test? 🖥️🖥️🖥️</h2>
+<p>Imagine every seat in a packed stadium is a virtual machine — and you want all of them occupied and running at exactly the same time. The question isn't whether <em>one</em> VM can start. The question is whether the control plane can handle <em>all of them starting simultaneously</em> without falling over.</p>
+<p><strong>This is the test that separates a real virtualisation platform from one that only works at small scale.</strong></p>
+<p>When you demo this: <em>"Watch the screen — in the next 60 seconds you'll see N virtual machines boot simultaneously on your cluster. That's the same workload as replacing your entire VMware farm with OpenShift Virtualization."</em></p>
+<hr>
+<h2>What it validates</h2>
+<ul>
+  <li><strong>virt-controller:</strong> can it process N concurrent VM creation requests?</li>
+  <li><strong>virt-handler:</strong> can it reconcile N VMIs on each node simultaneously?</li>
+  <li><strong>etcd:</strong> can it absorb the write burst from all VMI objects?</li>
+  <li><strong>Worker nodes:</strong> do they have enough memory to host N VMs?</li>
+</ul>
+<hr>
+<h2>What it measures</h2>
+<table>
+<thead><tr><th>Metric</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>VMI ready latency (P50/P95/P99)</td><td>Time from VMI creation to Running phase</td></tr>
+<tr><td>virt-controller queue depth</td><td>How many VMIs are awaiting reconciliation</td></tr>
+<tr><td>Node memory pressure</td><td>OOM risk from guest memory</td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Browser tabs to open</h2>
+<table>
+<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
+<tbody>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VMs appearing and transitioning to Running</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Observe → Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</td><td>Memory climbing per node</td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Step-by-step guide</h2>
+<div class="step-hdr">Step 1 — Verify OpenShift Virtualization</div>
+<pre>oc whoami
+oc get hyperconverged -A
+oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l</pre>
+<div class="warn">The hyperconverged query must return a result. If empty — stop here.</div>
+<div class="step-hdr">Step 2 — Create the project and RBAC</div>
+<pre>oc new-project burner-vmi-density
+oc create serviceaccount kube-burner -n burner-vmi-density</pre>
+<p>Apply ClusterRole (must include <code>kubevirt.io</code>) and ClusterRoleBinding. Verify all three exist.</p>
+<div class="step-hdr">Step 3 — Set parameters</div>
+<pre>VM_COUNT=10
+UUID="vmi-density-$(date +%s)"</pre>
+<table>
+<thead><tr><th>Cluster size</th><th>Starter</th><th>Medium</th><th>Heavy</th></tr></thead>
+<tbody>
+<tr><td>2–3 workers</td><td>5 VMs</td><td>10 VMs</td><td>20 VMs</td></tr>
+<tr><td>4–6 workers</td><td>10 VMs</td><td>25 VMs</td><td>50 VMs</td></tr>
+</tbody>
+</table>
+<div class="step-hdr">Step 4 — Write config and VM template</div>
+<p>Write <code>/tmp/vmi-density-config.yml</code> (with <code>gc: false</code>, <code>namespacedIterations: false</code>, <code>vmiLatency</code> measurement) and <code>/tmp/vm-template.yml</code> (with <code>running: true</code>, 512Mi memory, cirros disk).</p>
+<div class="step-hdr">Step 5 — Create ConfigMap and launch Job</div>
+<pre>oc create configmap vmi-density-config \
+  --from-file=config.yml=/tmp/vmi-density-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-vmi-density
+
+oc apply -f - &lt;&lt; JOBYAML
+# (Job YAML from full markdown guide)
+JOBYAML</pre>
+<div class="step-hdr">Step 6 — Watch the VMs boot</div>
+<pre>oc get pod -n burner-vmi-density -w
+# Wait for Running, then:
+oc logs -f job/kb-vmi-density -n burner-vmi-density</pre>
+<div class="tip"><strong>What to say to a customer:</strong> "Watch the Virtualization screen — each icon that turns green is a VM that just booted. We started all of them at the same time. This is the same workload as migrating your VMware estate to OpenShift."</div>
+<div class="step-hdr">Step 7 — Read results</div>
+<pre>INFO vmiLatency:
+INFO   P50:  32s
+INFO   P95:  55s
+INFO   P99:  78s
+INFO Finished execution.</pre>
+<div class="step-hdr">Step 8 — Clean up</div>
+<pre>oc delete job kb-vmi-density -n burner-vmi-density 2&gt;/dev/null || true
+oc delete configmap vmi-density-config -n burner-vmi-density 2&gt;/dev/null || true
+oc delete project burner-vmi-density
+oc delete clusterrole kube-burner 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</pre>
+<hr>
+<h2>Expected results</h2>
+<table>
+<thead><tr><th>Cluster type</th><th>VMs created</th><th>Expected P99</th></tr></thead>
+<tbody>
+<tr><td>3 workers</td><td>10</td><td>30–60 s</td></tr>
+<tr><td>3 workers</td><td>25</td><td>45–90 s</td></tr>
+<tr><td>3 workers</td><td>50</td><td>90–180 s</td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>no kind VirtualMachine</code></td><td>OpenShift Virtualization not installed — verify Step 1</td></tr>
+<tr><td>VMs stuck in <code>Scheduling</code></td><td>Not enough RAM — reduce VM_COUNT</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 2 separately</td></tr>
+</tbody>
+</table>
+<div class="footer">Kube-Burner v2.6.1 | Test 20 of 22 | Source: github.com/kube-burner/kube-burner</div>
+</body>
+</html>

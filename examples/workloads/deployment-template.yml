@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: node-density
+    iteration: "{{.Iteration}}"
+spec:
+  replicas: {{.podReplicas}}
+  selector:
+    matchLabels:
+      app: node-density
+      name: app-{{.Iteration}}-{{.Replica}}
+  template:
+    metadata:
+      labels:
+        app: node-density
+        name: app-{{.Iteration}}-{{.Replica}}
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+            limits:
+              cpu: "50m"
+              memory: "32Mi"
+      terminationGracePeriodSeconds: 0

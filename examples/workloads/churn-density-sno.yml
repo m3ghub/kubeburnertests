@@ -1,0 +1,42 @@
+global:
+  gc: true
+  gcMetrics: true
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 120s
+        - conditionType: PodScheduled
+          metric: P99
+          threshold: 30s
+
+jobs:
+  - name: churn-density
+    jobType: create
+    # SNO pod limit is 250; ~224 system pods already running = 26 slots available.
+    # 4 iterations x 5 pods = 20 benchmark pods, leaving a safe buffer of 6.
+    jobIterations: 4
+    qps: 10
+    burst: 10
+    namespace: burner-churn
+    namespacedIterations: true
+    cleanup: true
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    preLoadImages: true
+    preLoadPeriod: 5m
+    churnConfig:
+      percent: 25          # 25% of 4 iterations = 1 namespace churned per cycle
+      duration: 2m
+      delay: 15s
+      deleteDelay: 5s
+      mode: namespaces
+    objects:
+      - objectTemplate: pod.yml
+        replicas: 5
+        inputVars:
+          image: registry.k8s.io/pause:3.9
+          cpuRequest: "10m"
+          memRequest: "16Mi"

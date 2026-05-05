@@ -1,0 +1,32 @@
+# Prometheus metrics to scrape during the benchmark
+- query: irate(process_cpu_seconds_total{job="apiserver"}[2m])
+  metricName: apiserverCPU
+  instant: false
+
+- query: process_resident_memory_bytes{job="apiserver"}
+  metricName: apiserverMemory
+  instant: false
+
+- query: etcd_mvcc_db_total_size_in_bytes
+  metricName: etcdDBSize
+  instant: false
+
+- query: histogram_quantile(0.99,sum(rate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|CONNECT"}[2m])) by (le,verb,resource))
+  metricName: apiserverRequestP99Latency
+  instant: false
+
+- query: scheduler_pending_pods
+  metricName: schedulerPendingPods
+  instant: false
+
+- query: irate(process_cpu_seconds_total{job="kube-scheduler"}[2m])
+  metricName: schedulerCPU
+  instant: false
+
+- query: irate(node_cpu_seconds_total{mode!="idle"}[2m])
+  metricName: nodeCPU
+  instant: false
+
+- query: node_memory_MemAvailable_bytes
+  metricName: nodeMemoryAvailable
+  instant: false

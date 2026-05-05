@@ -1,0 +1,266 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                           17-VM-HOTPLUG-STORAGE
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift Virtualization
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+      TEST 17: VM HOT-PLUG STORAGE — ATTACHING AND DETACHING DISKS ON
+                            RUNNING VIRTUAL MACHINES
+================================================================================
+
+  NOTE: Difficulty: Expert (4/4 stars)
+  NOTE: Time to run: ~25 minutes
+  NOTE: What it does: Creates running VMs then hot-plugs and hot-unplugs
+        PersistentVolumeClaims while VMs continue running
+  NOTE: Requires: OpenShift Virtualization, StorageClass with dynamic provisioning
+
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST?
+--------------------------------------------------------------------------------
+
+Imagine adding a USB drive to a computer that is already running -- without
+restarting it. The computer detects the new drive and you can immediately use it.
+
+That is hot-plug storage for virtual machines.
+
+This test:
+  1. Creates running VMs
+  2. Creates PersistentVolumeClaims (PVCs) for the disks
+  3. Uses add-volume to attach each PVC to a running VM
+  4. Waits for the attachment to complete
+  5. Uses remove-volume to detach while the VM keeps running
+  6. Cleans up
+
+Tests: CDI (Containerized Data Importer), virtio-scsi hot-attach,
+       and the virt-handler hot-plug implementation simultaneously.
+
+--------------------------------------------------------------------------------
+  HOW HOT-PLUG STORAGE WORKS
+--------------------------------------------------------------------------------
+
+  RUNNING VM                          STORAGE OPERATION
+  ----------------------              -------------------------------------------
+  OS running                          1. kube-burner triggers add-volume
+  virtio-scsi looking for devices     2. CDI creates attachment pod
+                                      3. PVC mounted to attachment pod
+                                      4. virtio-scsi hot-plug signal sent
+  VM detects new /dev/sdb  <-------   5. Block device visible in VM
+                                      6. kube-burner triggers remove-volume
+  VM /dev/sdb disappears   <-------   7. virtio-scsi hot-unplug signal
+                                      8. Attachment pod removed
+
+--------------------------------------------------------------------------------
+  WHAT DOES IT MEASURE?
+--------------------------------------------------------------------------------
+
+  Metric                          What it means
+  ------------------------------  -----------------------------------------------
+  Volume attach time              Time from add-volume to device in VMI status
+  Volume detach time              Time from remove-volume to device removed
+  PVC provision time              How fast StorageClass creates backing volumes
+  Concurrent attachment throughput How many VMs can receive volumes simultaneously
+  CDI operator response time      How fast CDI processes attachment requests
+
+--------------------------------------------------------------------------------
+  BEFORE YOU START
+--------------------------------------------------------------------------------
+
+  Check available storage classes:
+
+    oc get storageclass
+
+  Look for VOLUMEBINDINGMODE=Immediate. On OpenShift with ODF or LVM:
+
+    oc get storageclass | grep -E "(ocs|lvms|thin|ceph)"
+
+================================================================================
+  STEP-BY-STEP GUIDE
+================================================================================
+
+------------------------------------------------------------------------
+  STEP 1 -- Create namespace and RBAC
+------------------------------------------------------------------------
+
+  oc new-project burner-hotplug
+
+  IMPORTANT: ClusterRole must include:
+    - apiGroups: [""]
+      resources: [..., persistentvolumeclaims, persistentvolumes]
+      verbs: [get, list, watch, create, delete, update, patch]
+    - apiGroups: [subresources.kubevirt.io]
+      resources:
+        - virtualmachines/start
+        - virtualmachines/stop
+        - virtualmachines/addvolume
+        - virtualmachines/removevolume
+      verbs: [update]
+    - apiGroups: [cdi.kubevirt.io]
+      resources: [datavolumes]
+      verbs: [get, list, watch, create, delete, update, patch]
+
+------------------------------------------------------------------------
+  STEP 2 -- Create PVCs for hot-plug
+------------------------------------------------------------------------
+
+  for i in 1 2 3 4; do
+    oc apply -f - <<PVEOF
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: hotplug-pvc-${i}
+    namespace: burner-hotplug
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 1Gi
+  PVEOF
+  done
+
+  # Wait for PVCs to be Bound
+  oc wait pvc --all -n burner-hotplug --for=condition=Bound --timeout=120s
+
+------------------------------------------------------------------------
+  STEP 3 -- Create config (vm-hotplug-config.yml)
+------------------------------------------------------------------------
+
+  global:
+    gc: true
+    measurements: []
+
+  jobs:
+    - name: create-vms
+      jobType: create
+      namespace: burner-hotplug
+      namespacedIterations: false
+      jobIterations: 1
+      qps: 5
+      burst: 5
+      waitWhenFinished: false
+      objects:
+        - objectTemplate: vm-hotplug-template.yml
+          replicas: 4
+          wait: false
+          inputVars: {memory: 128Mi}
+
+    - name: start-vms
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 60s
+      objects:
+        - kubeVirtOp: start
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: add-volumes              # Hot-plug PVC to each running VM
+      jobType: kubevirt
+      executionMode: sequential
+      jobPause: 15s
+      objects:
+        - kubeVirtOp: add-volume
+          labelSelector: {kube-burner.io/job: create-vms}
+          inputVars:
+            volumeName: hotplug-pvc-{{.Replica}}
+            diskType: disk
+
+    - name: remove-volumes           # Hot-unplug from each running VM
+      jobType: kubevirt
+      executionMode: sequential
+      jobPause: 10s
+      objects:
+        - kubeVirtOp: remove-volume
+          labelSelector: {kube-burner.io/job: create-vms}
+          inputVars:
+            volumeName: hotplug-pvc-{{.Replica}}
+
+    - name: stop-vms
+      jobType: kubevirt
+      executionMode: parallel
+      objects:
+        - kubeVirtOp: stop
+          labelSelector: {kube-burner.io/job: create-vms}
+          inputVars: {force: false}
+
+------------------------------------------------------------------------
+  STEP 4 -- Run the test
+------------------------------------------------------------------------
+
+  oc create configmap vm-hotplug-config \
+    --from-file=config.yml=vm-hotplug-config.yml \
+    --from-file=vm-hotplug-template.yml=vm-hotplug-template.yml \
+    -n burner-hotplug
+
+  (Apply Job -- see HTML version for full Job YAML)
+
+------------------------------------------------------------------------
+  STEP 5 -- Watch volumes attach and detach
+------------------------------------------------------------------------
+
+  watch "oc get vmi -n burner-hotplug -o json | \
+    jq '.items[].status.volumeStatus'"
+
+  Look for: HotplugVolumeAttached  (volume fully attached)
+            HotplugVolumeMounted   (intermediate state -- wait)
+
+------------------------------------------------------------------------
+  STEP 6 -- Verify inside the VM (optional)
+------------------------------------------------------------------------
+
+  VMI=$(oc get vmi -n burner-hotplug \
+    -o jsonpath='{.items[0].metadata.name}')
+  virtctl console ${VMI} -n burner-hotplug
+  # Login: cirros / gocubsgo
+  # $ lsblk   -- should show sdb (hot-plugged disk)
+
+------------------------------------------------------------------------
+  STEP 7 -- Push harder (concurrent hot-plug)
+------------------------------------------------------------------------
+
+  Switch to parallel execution for simultaneous attach:
+
+    - name: add-volumes
+      jobType: kubevirt
+      executionMode: parallel    # Attach to ALL VMs simultaneously
+
+  Increase VM count to 20 and create 20 PVCs.
+  At 20 concurrent attachments, CDI and virtio-scsi are under heavy load.
+
+------------------------------------------------------------------------
+  STEP 8 -- Clean up
+------------------------------------------------------------------------
+
+  oc delete job kb-hotplug -n burner-hotplug 2>/dev/null || true
+  for i in 1 2 3 4; do
+    oc delete pvc hotplug-pvc-${i} -n burner-hotplug
+  done
+  oc delete project burner-hotplug
+  oc delete clusterrole kube-burner-virt
+  oc delete clusterrolebinding kube-burner-virt
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+  Problem                            Fix
+  ---------------------------------  -------------------------------------------
+  PVC stuck in Pending               No StorageClass can provision it
+  add-volume: volumeName not found   PVC must be Bound before attaching
+  HotplugVolumeMounted (not Attached) Intermediate state -- wait 30-60 seconds
+  forbidden: virtualmachines/addvolume  Add addvolume/removevolume to ClusterRole
+  StorageClass doesn't support hotplug  Try virtctl addvolume manually first
+
+================================================================================
+  END OF TEST 17
+================================================================================
+  You have completed all 5 advanced virtualization tests!
+
+  Return to: 09-kubevirt-density (baseline) to compare results
+  Full virt series: 09 -> 16 -> 13 -> 15 -> 14 -> 17
+================================================================================

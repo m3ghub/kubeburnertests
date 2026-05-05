@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-burner-churn
+  namespace: burner-test
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command:
+            - sh
+            - -c
+            - cp /config-src/* /config/ && mkdir -p /results
+          volumeMounts:
+            - name: config-src
+              mountPath: /config-src
+            - name: workdir
+              mountPath: /config
+            - name: results
+              mountPath: /results
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - -e
+            - /config/metrics-endpoints.yml
+            - --uuid=c3-churn-001
+            - --log-level=info
+          volumeMounts:
+            - name: workdir
+              mountPath: /config
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: config-src
+          configMap:
+            name: kube-burner-config
+        - name: workdir
+          emptyDir: {}
+        - name: results
+          emptyDir: {}

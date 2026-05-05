@@ -1,0 +1,44 @@
+# Pod Density Workload
+# Creates a high density of pods across multiple namespaces and measures scheduling latency.
+#
+# Usage:
+#   kube-burner init -c examples/workloads/pod-density.yml --uuid pod-density-001
+#
+# Override iterations at runtime:
+#   kube-burner init -c examples/workloads/pod-density.yml --set jobs.0.jobIterations=50
+
+global:
+  gc: true
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Initialized
+          metric: P99
+          threshold: 30s
+        - conditionType: Ready
+          metric: P99
+          threshold: 60s
+        - conditionType: PodScheduled
+          metric: P99
+          threshold: 15s
+
+jobs:
+  - name: pod-density
+    jobType: create
+    jobIterations: 10
+    qps: 20
+    burst: 20
+    namespace: pod-density
+    namespacedIterations: true    # One namespace per iteration
+    cleanup: true
+    podWait: false                # Don't block between iterations
+    waitWhenFinished: true        # Wait for all pods when done
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: pod-template.yml
+        replicas: 10              # 10 pods per namespace = 100 pods total
+        inputVars:
+          image: registry.k8s.io/pause:3.9
+          cpuRequest: "10m"
+          memRequest: "16Mi"

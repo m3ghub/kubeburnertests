@@ -1,0 +1,8 @@
+- endpoint: https://prometheus-k8s-openshift-monitoring.apps.ilo2m284101d3.rhc-lab.iad.redhat.com
+  token: sha256~BlUIj4gK5Cd1oTL4xAEZdeJYoZrwV7taJdPqY5VfD0s
+  skipTLSVerify: true
+  metrics:
+    - metrics.yml
+  indexer:
+    type: local
+    metricsDirectory: /results

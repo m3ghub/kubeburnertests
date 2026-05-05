@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 21: OCP Web Burner — Production Web Application Density</title>
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+  </style>
+</head>
+<body>
+<h1>Test 21: OCP Web Burner — Production Web Application Density</h1>
+<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐⭐ Advanced</div>
+<div class="note"><strong>Time to run:</strong> ~20–30 minutes</div>
+<div class="note"><strong>What it does:</strong> Creates multi-container deployments with TLS Routes, HPAs, and NetworkPolicies — the closest thing to real production web app density</div>
+<div class="note"><strong>Requires:</strong> Multi-node OpenShift cluster, OpenShift Router</div>
+<hr>
+<h2>What is this test? 🌐</h2>
+<p>Imagine a shopping mall — not just one store, but hundreds of shops, each with its own front door (Route with TLS), security guard (NetworkPolicy), cash register system (sidecar container), and automatic resizing capability when there's a sale on (HorizontalPodAutoscaler).</p>
+<p><strong>web-burner is the test you run when a customer asks "can OpenShift handle my real web application at scale?"</strong> — because unlike the other density tests, this one creates workloads that look exactly like what runs in production.</p>
+<p>Show this to a customer: <em>"This isn't a synthetic benchmark. These are the same building blocks your apps use — Deployments, Routes, HPA, NetworkPolicies. We packed hundreds of them onto your cluster."</em></p>
+<hr>
+<h2>What each namespace contains</h2>
+<ul>
+  <li>Multi-container <strong>Deployment</strong> (app + sidecar proxy)</li>
+  <li><strong>Service</strong> with multiple ports</li>
+  <li>OpenShift <strong>Route</strong> with TLS edge termination</li>
+  <li><strong>HorizontalPodAutoscaler</strong> targeting the Deployment</li>
+  <li><strong>NetworkPolicy</strong> isolating the namespace</li>
+  <li><strong>ConfigMap</strong> + <strong>Secret</strong></li>
+</ul>
+<hr>
+<h2>What it measures</h2>
+<table>
+<thead><tr><th>Metric</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>HPA sync latency</td><td>Time for HPA to reconcile after Deployment creation</td></tr>
+<tr><td>Route TLS termination throughput</td><td>Routes admitted with TLS per second</td></tr>
+<tr><td>Pod ready latency (P99)</td><td>Pod startup under realistic constraints</td></tr>
+<tr><td>Network policy enforcement delay</td><td>Time for OVN/SDN to program isolation rules</td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Browser tabs to open</h2>
+<table>
+<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
+<tbody>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Workloads → HorizontalPodAutoscalers</td><td>HPAs appearing with metrics</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Networking → Routes</td><td>TLS routes with Accepted status</td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Metrics</td><td><code>count(kube_horizontalpodautoscaler_spec_max_replicas)</code></td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Step-by-step guide</h2>
+<div class="step-hdr">Step 1 — Verify pre-flight</div>
+<pre>oc whoami
+oc get ingresscontroller -n openshift-ingress-operator
+oc get apiservice v2.autoscaling</pre>
+<div class="step-hdr">Step 2 — Create the project and RBAC</div>
+<pre>oc new-project burner-web-burner
+oc create serviceaccount kube-burner -n burner-web-burner</pre>
+<p>Apply ClusterRole (must include <code>route.openshift.io</code> and <code>autoscaling</code> apiGroups) and ClusterRoleBinding.</p>
+<div class="step-hdr">Step 3 — Write config and templates</div>
+<pre>ITERATIONS=20
+UUID="web-burner-$(date +%s)"
+# Write config.yml and all 5 templates (deployment, service, route, hpa, networkpolicy)
+# See full markdown guide for complete template content</pre>
+<div class="step-hdr">Step 4 — Create ConfigMap</div>
+<pre>oc create configmap web-burner-config \
+  --from-file=config.yml=/tmp/web-burner-config.yml \
+  --from-file=deployment-template.yml=/tmp/web-deployment-template.yml \
+  --from-file=service-template.yml=/tmp/web-service-template.yml \
+  --from-file=route-template.yml=/tmp/web-route-template.yml \
+  --from-file=hpa-template.yml=/tmp/web-hpa-template.yml \
+  --from-file=networkpolicy-template.yml=/tmp/web-networkpolicy-template.yml \
+  -n burner-web-burner</pre>
+<div class="step-hdr">Step 5 — Launch the Job</div>
+<pre>cat &lt;&lt; JOBYAML | oc apply -f -
+# (Job YAML from full markdown guide)
+JOBYAML
+
+oc get pod -n burner-web-burner -w
+oc logs -f job/kb-web-burner -n burner-web-burner</pre>
+<div class="step-hdr">Step 6 — Watch the cluster</div>
+<p><strong>Tab 2:</strong> HPAs appearing — each watching a Deployment, ready to scale at 70% CPU.</p>
+<p><strong>Tab 3:</strong> TLS routes appearing and transitioning from <code>unknown</code> to <code>Accepted</code>.</p>
+<div class="tip"><strong>What to say:</strong> "This namespace represents one production web application — it has a multi-container deployment with a sidecar, a TLS-terminated route, an autoscaler watching CPU, and network isolation from all other tenants."</div>
+<div class="step-hdr">Step 7 — Read results</div>
+<pre>INFO podLatency:
+INFO   P50:  4.2s
+INFO   P99:  14.3s
+INFO Finished execution.</pre>
+<div class="step-hdr">Step 8 — Clean up</div>
+<pre>oc delete job kb-web-burner -n burner-web-burner 2&gt;/dev/null || true
+for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name | grep "^web-app-"); do
+  oc delete project $ns
+done
+oc delete project burner-web-burner
+oc delete clusterrole kube-burner 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</pre>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>cannot create resource "routes"</code></td><td>Add route.openshift.io to ClusterRole</td></tr>
+<tr><td><code>cannot create resource "horizontalpodautoscalers"</code></td><td>Add autoscaling apiGroup to ClusterRole</td></tr>
+<tr><td>Routes stuck in <code>unknown</code></td><td>Router overloaded — reduce ITERATIONS</td></tr>
+</tbody>
+</table>
+<div class="footer">Kube-Burner v2.6.1 | Test 21 of 22 | Source: github.com/kube-burner/kube-burner</div>
+</body>
+</html>

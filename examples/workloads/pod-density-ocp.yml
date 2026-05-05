@@ -1,0 +1,33 @@
+global:
+  gc: true
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 60s
+        - conditionType: PodScheduled
+          metric: P99
+          threshold: 15s
+
+jobs:
+  - name: pod-density
+    jobType: create
+    jobIterations: 3
+    qps: 10
+    burst: 10
+    namespace: burner-density
+    namespacedIterations: true
+    cleanup: true
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 5m
+    verifyObjects: true
+    objects:
+      - objectTemplate: pod.yml
+        replicas: 5
+        inputVars:
+          image: registry.k8s.io/pause:3.9
+          cpuRequest: "10m"
+          memRequest: "16Mi"

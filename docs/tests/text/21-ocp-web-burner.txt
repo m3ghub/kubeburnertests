@@ -1,0 +1,136 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                            21-OCP-WEB-BURNER
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift / Kubernetes
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+       TEST 21: OCP WEB BURNER -- PRODUCTION WEB APPLICATION DENSITY
+================================================================================
+
+  NOTE: Difficulty: ⭐⭐⭐⭐ Advanced
+  NOTE: Time to run: ~20-30 minutes
+  NOTE: What it does: Creates multi-container deployments with TLS Routes,
+        HPAs, and NetworkPolicies simulating real production web app density
+  NOTE: Requires: Multi-node OpenShift cluster, OpenShift Router
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST? 🌐
+--------------------------------------------------------------------------------
+
+Imagine a shopping mall -- not just one store, but hundreds of shops, each
+with its own front door (Route with TLS), security guard (NetworkPolicy),
+cash register system (sidecar container), and automatic resizing capability
+when there is a sale on (HorizontalPodAutoscaler).
+
+web-burner is the test you run when a customer asks "can OpenShift handle my
+real web application at scale?" -- because unlike the other density tests, this
+one creates workloads that look exactly like what runs in production.
+
+Demo quote: "This isn't a synthetic benchmark. These are the same building
+blocks your apps use -- Deployments, Routes, HPA, NetworkPolicies. We packed
+hundreds of them onto your cluster."
+
+--------------------------------------------------------------------------------
+  EACH NAMESPACE CONTAINS
+--------------------------------------------------------------------------------
+
+  - Multi-container Deployment (app + sidecar proxy)
+  - Service with multiple ports
+  - OpenShift Route with TLS edge termination
+  - HorizontalPodAutoscaler (CPU-based, 70% target)
+  - NetworkPolicy (isolating the namespace)
+  - ConfigMap + Secret
+
+--------------------------------------------------------------------------------
+  WHAT IT MEASURES
+--------------------------------------------------------------------------------
+
+  Metric                        Description
+  -------                       -----------
+  HPA sync latency              Time for HPA to reconcile after creation
+  Route TLS throughput          Routes admitted with TLS per second
+  Pod ready latency (P99)       Pod startup under realistic constraints
+  Network policy delay          Time for OVN/SDN to program isolation rules
+
+--------------------------------------------------------------------------------
+  BROWSER TABS TO OPEN
+--------------------------------------------------------------------------------
+
+  Tab 1: Console (web terminal)
+  Tab 2: Workloads -> HorizontalPodAutoscalers (HPAs with metrics)
+  Tab 3: Networking -> Routes (TLS routes with Accepted status)
+  Tab 4: Observe -> Metrics  (count(kube_horizontalpodautoscaler_spec_max_replicas))
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP GUIDE
+--------------------------------------------------------------------------------
+
+STEP 1 -- VERIFY PRE-FLIGHT
+    oc whoami
+    oc get ingresscontroller -n openshift-ingress-operator
+    oc get apiservice v2.autoscaling
+
+STEP 2 -- CREATE PROJECT AND RBAC
+    oc new-project burner-web-burner
+    oc create serviceaccount kube-burner -n burner-web-burner
+  Apply ClusterRole (includes route.openshift.io, autoscaling, networking.k8s.io)
+  and ClusterRoleBinding (see markdown guide for full YAML).
+
+STEP 3 -- WRITE CONFIG AND TEMPLATES
+    ITERATIONS=20
+    UUID="web-burner-$(date +%s)"
+  Write: config.yml, deployment-template.yml, service-template.yml,
+         route-template.yml, hpa-template.yml, networkpolicy-template.yml
+
+STEP 4 -- CREATE CONFIGMAP
+    oc create configmap web-burner-config \
+      --from-file=config.yml=/tmp/web-burner-config.yml \
+      --from-file=deployment-template.yml=/tmp/web-deployment-template.yml \
+      --from-file=service-template.yml=/tmp/web-service-template.yml \
+      --from-file=route-template.yml=/tmp/web-route-template.yml \
+      --from-file=hpa-template.yml=/tmp/web-hpa-template.yml \
+      --from-file=networkpolicy-template.yml=/tmp/web-networkpolicy-template.yml \
+      -n burner-web-burner
+
+STEP 5 -- LAUNCH JOB AND STREAM LOGS
+  Apply the Job YAML (see markdown guide).
+    oc get pod -n burner-web-burner -w
+    oc logs -f job/kb-web-burner -n burner-web-burner
+
+  WHAT TO SAY: "This namespace represents one production web application --
+  it has a multi-container deployment with a sidecar, a TLS-terminated route,
+  an autoscaler watching CPU, and network isolation from all other tenants."
+
+STEP 6 -- READ RESULTS
+    INFO podLatency:
+    INFO   P50:  4.2s
+    INFO   P99:  14.3s
+    INFO Finished execution.
+
+STEP 7 -- CLEAN UP
+    oc delete job kb-web-burner -n burner-web-burner 2>/dev/null || true
+    for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name \
+      | grep "^web-app-"); do oc delete project $ns; done
+    oc delete project burner-web-burner
+    oc delete clusterrole kube-burner 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner 2>/dev/null || true
+    oc get projects | grep web-app
+  Should return nothing.
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM                               FIX
+  cannot create resource routes         Add route.openshift.io to ClusterRole
+  cannot create resource HPAs           Add autoscaling apiGroup to ClusterRole
+  Routes stuck in unknown               Router overloaded -- reduce ITERATIONS
+  HPA shows unknown metrics             Wait 60s for metrics server
+
+================================================================================

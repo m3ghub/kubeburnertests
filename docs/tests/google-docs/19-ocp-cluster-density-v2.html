@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 19: OCP Cluster Density v2 — Full-Stack Multi-Tenant Scale</title>
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+  </style>
+</head>
+<body>
+<h1>Test 19: OCP Cluster Density v2 — Full-Stack Multi-Tenant Scale</h1>
+<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐⭐ Advanced</div>
+<div class="note"><strong>Time to run:</strong> ~20–30 minutes</div>
+<div class="note"><strong>What it does:</strong> Creates N namespaces simultaneously, each with a Deployment, Service, Route, ConfigMaps, Secrets, and NetworkPolicy</div>
+<div class="note"><strong>Requires:</strong> Multi-node OpenShift cluster</div>
+<hr>
+<h2>What is this test? 🏙️</h2>
+<p>Imagine spinning up a brand new city from scratch — but not just empty buildings. Every block has a working storefront (Deployment), a road name (Service), a postal address accessible from outside (Route), a security fence (NetworkPolicy), and a key box with secrets (ConfigMap + Secret).</p>
+<p>Now do that for 500 blocks simultaneously.</p>
+<p><strong>Cluster Density v2 is the most realistic OpenShift workload test there is.</strong> It doesn't just measure whether the API server can take writes — it measures whether the <em>whole stack</em> can handle real enterprise tenants being provisioned at scale.</p>
+<p>When you demo this to a customer: <em>"This is what 500 namespaces of production workloads hitting your cluster at the same time looks like — and your cluster handled it in under 20 minutes."</em></p>
+<hr>
+<h2>What it measures</h2>
+<table>
+<thead><tr><th>Metric</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>Pod creation latency (P50/P95/P99)</td><td>Time from API call to pod Running</td></tr>
+<tr><td>Route admission latency</td><td>Time for OpenShift router to program the route</td></tr>
+<tr><td>API server request rate</td><td>Peak requests/second across all object types</td></tr>
+<tr><td>etcd DB size growth</td><td>Bytes added per namespace created</td></tr>
+<tr><td>Controller manager queue depth</td><td>How many objects are backlogged</td></tr>
+<tr><td>Namespace creation throughput</td><td>Namespaces created per second</td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Browser tabs to open</h2>
+<table>
+<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
+<tbody>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Home → Projects</td><td>Project count climbing in real time</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Networking → Routes</td><td>Routes appearing and showing Accepted</td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Metrics</td><td><code>rate(apiserver_request_total[1m])</code></td></tr>
+</tbody>
+</table>
+<hr>
+<h2>Step-by-step guide</h2>
+<div class="step-hdr">Step 1 — Open the web terminal and verify</div>
+<pre>oc whoami
+oc get nodes --no-headers | awk '{print $1, $2}'</pre>
+<div class="step-hdr">Step 2 — Create the project and RBAC</div>
+<pre>oc new-project burner-cluster-density
+oc create serviceaccount kube-burner -n burner-cluster-density</pre>
+<p>Apply ClusterRole (must include <code>route.openshift.io</code> and <code>networking.k8s.io</code>) and ClusterRoleBinding (see full markdown guide).</p>
+<pre>oc get serviceaccount kube-burner -n burner-cluster-density
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner</pre>
+<div class="step-hdr">Step 3 — Write config and all templates</div>
+<pre>ITERATIONS=50
+UUID="cluster-density-$(date +%s)"
+# Write config.yml, deployment, service, route, networkpolicy templates
+# See full markdown guide for all template content</pre>
+<div class="step-hdr">Step 4 — Create the ConfigMap</div>
+<pre>oc create configmap cluster-density-config \
+  --from-file=config.yml=/tmp/cluster-density-config.yml \
+  --from-file=deployment-template.yml=/tmp/deployment-template.yml \
+  --from-file=service-template.yml=/tmp/service-template.yml \
+  --from-file=route-template.yml=/tmp/route-template.yml \
+  --from-file=networkpolicy-template.yml=/tmp/networkpolicy-template.yml \
+  -n burner-cluster-density</pre>
+<div class="step-hdr">Step 5 — Launch the Job and stream logs</div>
+<pre>cat &lt;&lt; JOBYAML | oc apply -f -
+# (Job YAML from full markdown guide)
+JOBYAML
+
+oc get pod -n burner-cluster-density -w
+oc logs -f job/kb-cluster-density -n burner-cluster-density</pre>
+<div class="step-hdr">Step 6 — What to show the customer</div>
+<p><strong>Tab 2 (Home → Projects):</strong> Watch the project count climb. Each project = one fully provisioned tenant.</p>
+<p><strong>Tab 3 (Networking → Routes):</strong> Watch TLS routes appear and show <code>Accepted</code>.</p>
+<div class="tip"><strong>What to say:</strong> "Each project you see appearing is a complete application namespace — Deployment, Service, Route, ConfigMaps, Secrets, and NetworkPolicy. We're creating 50 of them simultaneously."</div>
+<div class="step-hdr">Step 7 — Read results</div>
+<pre>INFO podLatency:
+INFO   P50:  3.1s
+INFO   P99:  12.8s
+INFO Finished execution.</pre>
+<div class="step-hdr">Step 8 — Clean up</div>
+<pre>oc delete job kb-cluster-density -n burner-cluster-density 2&gt;/dev/null || true
+for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name | grep "^cluster-density"); do
+  oc delete project $ns
+done
+oc delete project burner-cluster-density
+oc delete clusterrole kube-burner 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</pre>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 2 — create SA separately</td></tr>
+<tr><td>Routes not appearing</td><td>Check <code>oc get ingresscontroller -A</code></td></tr>
+<tr><td><code>cannot create resource "routes"</code></td><td>Add route.openshift.io to ClusterRole</td></tr>
+<tr><td>P99 &gt; 20s</td><td>Reduce ITERATIONS — etcd write limit reached</td></tr>
+</tbody>
+</table>
+<div class="footer">Kube-Burner v2.6.1 | Test 19 of 22 | Source: github.com/kube-burner/kube-burner</div>
+</body>
+</html>

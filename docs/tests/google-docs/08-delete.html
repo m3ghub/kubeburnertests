@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 08: Delete Workload — The Controlled Cleanup Test</title>
+  <!--
+    GOOGLE DOCS IMPORT:
+    1. Go to https://docs.google.com
+    2. File > Open > Upload > select this file
+  -->
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  h4{font-size:11pt;color:#3c4043;margin-top:14px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}
+  thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}
+  tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+</style>
+</head>
+<body>
+<h1>Test 08: Delete Workload — The Controlled Cleanup Test</h1>
+<br>
+<div class="note"><strong>Difficulty:</strong> ⭐ Beginner  </div>
+<div class="note"><strong>Time to run:</strong> ~5 minutes  </div>
+<div class="note"><strong>What it does:</strong> Deletes large numbers of Kubernetes resources in a controlled way to measure deletion speed and ensure garbage collection is working correctly</div>
+<br>
+<hr>
+<br>
+<h2>What is this test? 🗑️</h2>
+<br>
+<p>Imagine after a big birthday party, you have to clean up — take down 50 balloons, fold 50 napkins, stack 50 chairs. The question is: <em>how fast can you clean up without dropping anything or forgetting something?</em></p>
+<br>
+<p>The <strong>Delete</strong> workload does exactly this for Kubernetes. It creates resources and then deletes them at high speed, measuring:</p>
+<li>How fast the API server processes delete requests</li>
+<li>How fast pods terminate (their containers get the stop signal)</li>
+<li>Whether all resources are truly gone (no orphaned objects left behind)</li>
+<br>
+<hr>
+<br>
+<h2>What does it measure?</h2>
+<br>
+<table>
+<thead><tr><th>Metric</th><th>What it means</th></tr></thead><tbody>
+<tr><td><strong>Delete throughput</strong></td><td>How many objects deleted per second</td></tr>
+<tr><td><strong>Pod termination time</strong></td><td>How long until the pod container actually stops</td></tr>
+<tr><td><strong>Namespace cleanup time</strong></td><td>How long until an entire namespace is gone</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2>How it works</h2>
+<br>
+<pre>
+Phase 1 — Create:   🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢  (10 Deployments)
+
+Phase 2 — Delete:
+  DELETE Deployment-1 ──► Pod starts Terminating ──► Container stops ──► Pod gone ✅
+  DELETE Deployment-2 ──► Pod starts Terminating ──► Container stops ──► Pod gone ✅
+  DELETE Deployment-3 ──► Pod starts Terminating ──► Container stops ──► Pod gone ✅
+  ...all at once, as fast as possible...
+
+Phase 3 — Measure:
+  ✅ All pods gone?  Yes!
+  ⏱️  How long did it take?  3.2 seconds for 10 Deployments
+</pre>
+<br>
+<hr>
+<br>
+<h2>Before you start ✅</h2>
+<br>
+<li>[ ] kube-burner installed</li>
+<li>[ ] Logged in as cluster-admin</li>
+<li>[ ] RBAC applied</li>
+<li>[ ] ~5 minutes available</li>
+<br>
+<hr>
+<br>
+<h2>Step-by-step guide</h2>
+<br>
+<div class="step-hdr">Step 1 — Create the namespace</div>
+<br>
+<div class="note"><strong>Do this first — every other step depends on it.</strong></div>
+<br>
+<pre>
+oc new-project burner-delete-test
+</pre>
+<br>
+<p>You should see:</p>
+<pre>
+Now using project "burner-delete-test" on server "https://api.&lt;your-cluster&gt;:6443"
+</pre>
+<br>
+<div class="note"><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</div>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 2 — Set up RBAC</div>
+<br>
+<p>Every test needs a <code>ServiceAccount</code>, <code>ClusterRole</code>, and <code>ClusterRoleBinding</code>. Run all three commands — they are safe to re-run if any already exist.</p>
+<br>
+<p><strong>2a — Create the ServiceAccount in this namespace:</strong></p>
+<br>
+<pre>
+oc create serviceaccount kube-burner -n burner-delete-test 2&gt;/dev/null || true
+</pre>
+<br>
+<p><strong>2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster, inline — no local file needed):</strong></p>
+<br>
+<pre>
+oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-delete-test
+EOF
+</pre>
+<br>
+<p><strong>2c — Add this namespace to the ClusterRoleBinding:</strong></p>
+<br>
+<pre>
+oc patch clusterrolebinding kube-burner \
+  --type=json \
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-delete-test"}}]' 2&gt;/dev/null || true
+</pre>
+<br>
+<div class="note">The <code>|| true</code> at the end means this command will not fail if the namespace is already listed. It is safe to run every time.</div>
+<br>
+<p><strong>Verify all three are in place before continuing:</strong></p>
+<br>
+<pre>
+oc get serviceaccount kube-burner -n burner-delete-test
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
+</pre>
+<br>
+<p>The last command should include <code>burner-delete-test</code> in the output.</p>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 3 — Create config files</div>
+<br>
+<p>Create <code>delete-config.yml</code>:</p>
+<br>
+<pre>
+cat &gt; /tmp/delete-config.yml &lt;&lt; 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: podLatency
+
+jobs:
+  - name: delete-setup
+    namespace: burner-delete-test
+    jobType: create
+    jobIterations: 1
+    qps: 20
+    burst: 20
+    objects:
+      - objectTemplate: deployment.yml
+        replicas: 10
+    waitWhenFinished: true
+    podWait: true
+    maxWaitTimeout: 5m
+
+  - name: delete-workload
+    namespace: burner-delete-test
+    jobType: delete
+    qps: 20
+    burst: 20
+    objects:
+      - kind: Deployment
+        apiVersion: apps/v1
+        labelSelector:
+          app: kube-burner
+EOF
+</pre>
+<br>
+<p>Create <code>deployment.yml</code>:</p>
+<br>
+<pre>
+cat &gt; /tmp/deployment.yml &lt;&lt; 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burner-dep-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: burner-dep-{{.Iteration}}-{{.Replica}}
+  template:
+    metadata:
+      labels:
+        name: burner-dep-{{.Iteration}}-{{.Replica}}
+        app: kube-burner
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 1m
+              memory: 10Mi
+EOF
+</pre>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 4 — Package into a ConfigMap</div>
+<br>
+<pre>
+oc create configmap delete-config \
+  --from-file=config.yml=/tmp/delete-config.yml \
+  --from-file=deployment.yml=/tmp/deployment.yml \
+  -n burner-delete-test
+</pre>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 5 — Run the test!</div>
+<br>
+<pre>
+cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-delete
+  namespace: burner-delete-test
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=delete-001]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: delete-config
+        - name: workdir
+          emptyDir: {}
+EOF
+</pre>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 6 — Watch the test run</div>
+<br>
+<pre>
+oc get pods -n burner-delete-test -w
+</pre>
+<br>
+<p>You will see the kube-burner Job pod move through these states:</p>
+<br>
+<pre>
+NAME              READY   STATUS    RESTARTS   AGE
+kb-delete-27qrg   1/1     Running     0         26s
+kb-delete-27qrg   0/1     Completed   0         40s
+kb-delete-27qrg   0/1     Completed   0         42s
+</pre>
+<br>
+<li><strong>Running</strong> — kube-burner is actively creating and then deleting resources inside the namespace</li>
+<li><strong>Completed</strong> — the test finished successfully; all jobs (create + delete) are done</li>
+<br>
+<div class="note"><strong>Note:</strong> You will NOT see the workload pods go <code>Terminating</code> here — <code>oc get pods -w</code> is watching the <em>Job pod</em> itself, not the short-lived workload pods. The workload pods are created and destroyed too quickly to catch with a watch. To see the deletion in real-time as it happens, open a second terminal and run:</div>
+<div class="note">```bash</div>
+<div class="note">oc get pods -n burner-delete-test --watch</div>
+<div class="note">```</div>
+<div class="note">before you trigger the Job (Step 5).</div>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 7 — Read results</div>
+<br>
+<pre>
+oc logs -f job/kb-delete -n burner-delete-test
+</pre>
+<br>
+<pre>
+time="..." level=info msg="Triggering job: delete-setup (create)"
+time="..." level=info msg="delete-setup: 10/10 pods ready"
+time="..." level=info msg="Triggering job: delete-workload (delete)"
+time="..." level=info msg="Deleting 10 Deployments in burner-delete-test"
+time="..." level=info msg="delete-workload: all 10 objects deleted in 2800ms"
+time="..." level=info msg="Finished execution. UUID: delete-001"
+</pre>
+<br>
+<p><strong>Good deletion time:</strong></p>
+<li>Under <strong>5 seconds</strong> for 10 Deployments on a healthy cluster</li>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 8 — Verify everything is gone</div>
+<br>
+<pre>
+oc get all -n burner-delete-test
+# Should only show the kube-burner Job pod itself
+</pre>
+<br>
+<hr>
+<br>
+<div class="step-hdr">Step 9 — Clean up</div>
+<br>
+<pre>
+oc delete job kb-delete -n burner-delete-test
+oc delete configmap delete-config -n burner-delete-test
+oc delete project burner-delete-test
+</pre>
+<br>
+<hr>
+<br>
+<h2>Troubleshooting</h2>
+<br>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead><tbody>
+<tr><td><code>namespaces "burner-delete-test" not found</code> when creating ConfigMap</td><td>You must run <code>oc new-project burner-delete-test</code> <strong>before</strong> the <code>oc create configmap</code> command</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code> in Job events</td><td>The ServiceAccount only exists in the namespace where RBAC was first applied. Run <code>oc create serviceaccount kube-burner -n burner-delete-test</code></td></tr>
+<tr><td><code>cannot create resource "namespaces"</code> — authorization error</td><td>The <code>ClusterRoleBinding</code> points to the original namespace's SA. Patch it to add the new one: <code>oc patch clusterrolebinding kube-burner --type=json -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-delete-test"}}]'</code></td></tr>
+<tr><td>Pods stuck in <code>Terminating</code></td><td>Check for <code>finalizers</code> on the pod: <code>oc patch pod <name> -p '{"metadata":{"finalizers":[]}}' --type=merge</code></td></tr>
+<tr><td>Delete takes very long</td><td>Kubernetes default <code>terminationGracePeriodSeconds</code> is 30s — set it to 1s in the deployment template for testing</td></tr>
+<tr><td>Some objects not deleted</td><td>Check label selectors — they must exactly match the labels on the created objects</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<p><em>Next test: <a href="09-kubevirt-density.md">09 — KubeVirt Density</a> — create virtual machines inside Kubernetes</em></p>
+<br>
+<div class="footer">
+  Kube-Burner v2.6.1 &mdash; Test Guide &mdash; 08-delete<br>
+  Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
+</div>
+</body>
+</html>

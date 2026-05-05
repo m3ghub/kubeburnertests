@@ -1,0 +1,490 @@
+= Test 19: OCP Cluster Density v2 — Full-Stack Multi-Tenant Scale
+
+[sidebar]
+****
+_Difficulty:_ ⭐⭐⭐⭐ Advanced  
+_Time to run:_ ~20–30 minutes  
+_What it does:_ Creates N namespaces simultaneously, each with a Deployment, Service, Route, ConfigMaps, Secrets, and NetworkPolicy — the most realistic production workload simulation available  
+_Requires:_ Multi-node OpenShift cluster
+****
+
+TIP: _⚡ Pre-flight required:_ Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see _link:00-preflight.md[00-preflight.md]_.
+
+'''
+
+== What is this test? 🏙️
+
+Imagine spinning up a brand new city from scratch — but not just empty buildings. Every block has a working storefront (Deployment), a road name (Service), a postal address accessible from outside (Route), a security fence (NetworkPolicy), and a key box with secrets (ConfigMap + Secret).
+
+Now do that for 500 blocks simultaneously.
+
+_Cluster Density v2 is the most realistic OpenShift workload test there is._ It doesn't just measure whether the API server can take writes — it measures whether the _whole stack_ can handle real enterprise tenants being provisioned at scale: routers, policy controllers, endpoint slices, and the etcd write storm that comes with all of it.
+
+When you demo this to a customer: _"This is what 500 namespaces of production workloads hitting your cluster at the same time looks like — and your cluster handled it in under 20 minutes."_
+
+'''
+
+== What this test does
+
+`cluster-density-v2` is the closest approximation to a real production OpenShift workload.
+Each iteration creates one namespace containing:
+
+- A _Deployment_ (configurable replicas) with resource requests, liveness + readiness probes
+- A _Service_ pointing to the Deployment
+- An OpenShift _Route_ (tests the OpenShift router, not just Services)
+- _ConfigMaps_ and _Secrets_ mounted into the Deployment
+- A _NetworkPolicy_ restricting ingress
+
+This makes it significantly heavier than `cluster-density` (v1). Run this before major
+cluster upgrades, after adding worker nodes, or to establish a capacity baseline.
+
+'''
+
+== What it measures
+
+[cols="1,1", options="header"]
+|===
+| Metric | Description
+
+| Pod creation latency (P50/P95/P99) | Time from API call to pod Running
+| Route admission latency | Time for OpenShift router to program the route
+| API server request rate | Peak requests/second across all object types
+| etcd DB size growth | Bytes added per namespace created
+| Controller manager queue depth | How many objects are backlogged
+| Namespace creation throughput | Namespaces created per second
+|===
+
+'''
+
+== How it works
+
+----
+  YOU                        CLUSTER
+   │
+   │  oc apply -f job.yaml
+   ▼
+┌──────────────────────────────────────────────────────────┐
+│  kube-burner Job (quay.io/kube-burner/kube-burner)       │
+│                                                          │
+│  For each of N iterations:                               │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Create namespace cluster-density-v2-<N>           │  │
+│  │    ├── Deployment (app + sidecar)                  │  │
+│  │    ├── Service                                     │  │
+│  │    ├── Route (TLS)                                 │  │
+│  │    ├── ConfigMap + Secret                          │  │
+│  │    └── NetworkPolicy                               │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  Measures: podLatency, routeAdmission, apiServerRate     │
+└──────────────────────────────────────────────────────────┘
+   │
+   ▼
+Results: P99 pod-ready, route admission time, etcd size
+----
+
+'''
+
+== Before you start — open these browser tabs
+
+[cols="1,1,1", options="header"]
+|===
+| Tab | Where | What you watch
+
+| _Tab 1_ | Console (already open) | Web terminal
+| _Tab 2_ | Home → Projects | Project count climbing in real time
+| _Tab 3_ | Networking → Routes | Routes appearing and showing `Accepted`
+| _Tab 4_ | Observe → Metrics | `rate(apiserver_request_total[1m])` — API server load
+|===
+
+'''
+
+== Pre-flight checklist
+
+* [ ] Logged into the OpenShift web console
+* [ ] Cluster-admin permissions (`oc whoami`)
+* [ ] At least 3 worker nodes with headroom
+* [ ] OpenShift Router running (`oc get ingresscontroller -n openshift-ingress-operator`)
+
+'''
+
+== Step-by-step guide
+
+'''
+
+=== Step 1 — Open the web terminal
+
+Click the _`>_` icon_ in the top-right toolbar. Confirm connectivity:
+
+[source,bash]
+----
+oc whoami
+oc get nodes --no-headers | awk '{print $1, $2}'
+----
+
+'''
+
+=== Step 2 — Choose your iteration count
+
+[cols="1,1,1,1", options="header"]
+|===
+| Cluster size | Starter | Medium | Heavy
+
+| 3-worker OCP | 50 namespaces | 100 namespaces | 200 namespaces
+| 6+ workers | 200 namespaces | 500 namespaces | 1000 namespaces
+|===
+
+'''
+
+=== Step 3 — Create the project and RBAC
+
+[source,bash]
+----
+oc new-project burner-cluster-density
+oc create serviceaccount kube-burner -n burner-cluster-density
+----
+
+[source,bash]
+----
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-cluster-density
+EOF
+----
+
+Verify:
+
+[source,bash]
+----
+oc get serviceaccount kube-burner -n burner-cluster-density
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner
+----
+
+'''
+
+=== Step 4 — Switch to Tab 2
+
+Go to _Home → Projects_. Watch the project counter — it will climb as namespaces are created.
+
+'''
+
+=== Step 5 — Write the config files
+
+[source,bash]
+----
+ITERATIONS=50
+UUID="cluster-density-$(date +%s)"
+
+cat > /tmp/cluster-density-config.yml << EOF
+global:
+  gc: false
+  measurements:
+    - name: podLatency
+
+jobs:
+  - name: create-namespaces
+    jobType: create
+    jobIterations: ${ITERATIONS}
+    namespacedIterations: true
+    namespace: cluster-density-v2
+    podWait: true
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/deployment-template.yml
+        replicas: 1
+      - objectTemplate: /config/service-template.yml
+        replicas: 1
+      - objectTemplate: /config/route-template.yml
+        replicas: 1
+      - objectTemplate: /config/networkpolicy-template.yml
+        replicas: 1
+EOF
+----
+
+Write the deployment template:
+
+[source,bash]
+----
+cat > /tmp/deployment-template.yml << 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-{{.Iteration}}
+  labels:
+    app: cluster-density
+    kube-burner-job: create-namespaces
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cluster-density
+  template:
+    metadata:
+      labels:
+        app: cluster-density
+    spec:
+      containers:
+        - name: app
+          image: gcr.io/google_containers/pause:3.1
+          resources:
+            requests:
+              cpu: 10m
+              memory: 10Mi
+EOF
+----
+
+Write the service template:
+
+[source,bash]
+----
+cat > /tmp/service-template.yml << 'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-svc-{{.Iteration}}
+  labels:
+    kube-burner-job: create-namespaces
+spec:
+  selector:
+    app: cluster-density
+  ports:
+    - port: 80
+      targetPort: 8080
+EOF
+----
+
+Write the route template:
+
+[source,bash]
+----
+cat > /tmp/route-template.yml << 'EOF'
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: app-route-{{.Iteration}}
+  labels:
+    kube-burner-job: create-namespaces
+spec:
+  to:
+    kind: Service
+    name: app-svc-{{.Iteration}}
+  port:
+    targetPort: 8080
+EOF
+----
+
+Write the network policy template:
+
+[source,bash]
+----
+cat > /tmp/networkpolicy-template.yml << 'EOF'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-external-{{.Iteration}}
+  labels:
+    kube-burner-job: create-namespaces
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+EOF
+----
+
+'''
+
+=== Step 6 — Create the ConfigMap
+
+[source,bash]
+----
+oc create configmap cluster-density-config \
+  --from-file=config.yml=/tmp/cluster-density-config.yml \
+  --from-file=deployment-template.yml=/tmp/deployment-template.yml \
+  --from-file=service-template.yml=/tmp/service-template.yml \
+  --from-file=route-template.yml=/tmp/route-template.yml \
+  --from-file=networkpolicy-template.yml=/tmp/networkpolicy-template.yml \
+  -n burner-cluster-density
+
+oc get configmap cluster-density-config -n burner-cluster-density
+----
+
+'''
+
+=== Step 7 — Launch the Job
+
+[source,bash]
+----
+cat << JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-cluster-density
+  namespace: burner-cluster-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: cluster-density-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML
+----
+
+'''
+
+=== Step 8 — Watch the test run
+
+Wait for the pod to start:
+
+[source,bash]
+----
+oc get pod -n burner-cluster-density -w
+----
+
+Once `Running`, stream logs:
+
+[source,bash]
+----
+oc logs -f job/kb-cluster-density -n burner-cluster-density
+----
+
+'''
+
+=== Step 9 — Watch the cluster
+
+_Tab 2 (Home → Projects):_ Watch the project count climb. Each project = one fully provisioned tenant namespace.
+
+_Tab 3 (Networking → Routes):_ Filter `cluster-density` — watch routes appear and show `Accepted`.
+
+_Tab 4 (Observe → Metrics):_
+----
+rate(apiserver_request_total[1m])
+----
+This shows the API server handling the write storm.
+
+_What to say:_ _"Each project you see appearing is a complete application namespace — Deployment, Service, Route, ConfigMaps, Secrets, and NetworkPolicy. This is what one tenant looks like. We're creating 50 of them simultaneously to prove the cluster can run a large SaaS platform."_
+
+'''
+
+=== Step 10 — Read the results
+
+----
+INFO podLatency:
+INFO   P50:  3.1s
+INFO   P95:  7.4s
+INFO   P99:  12.8s
+INFO Finished execution. UUID: cluster-density-...
+----
+
+P99 over 20s typically means etcd is saturated or the controller manager queue is deep.
+
+'''
+
+=== Step 11 — Clean up
+
+[source,bash]
+----
+oc delete job kb-cluster-density -n burner-cluster-density 2>/dev/null || true
+
+# Delete all created namespaces
+for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name | grep "^cluster-density"); do
+  oc delete project $ns
+done
+
+oc delete project burner-cluster-density
+oc delete clusterrole kube-burner 2>/dev/null || true
+oc delete clusterrolebinding kube-burner 2>/dev/null || true
+----
+
+Verify clean:
+
+[source,bash]
+----
+oc get projects | grep cluster-density
+# Should return nothing
+----
+
+'''
+
+== Expected results
+
+[cols="1,1,1", options="header"]
+|===
+| Cluster type | Namespaces | Expected P99 pod-ready latency
+
+| 3-worker OCP | 50 | 4–10 s
+| 3-worker OCP | 200 | 5–15 s
+| Large OCP (10+ workers) | 500 | 3–8 s
+|===
+
+P99 over 20s typically means etcd is saturated or the controller manager queue is deep.
+
+'''
+
+== Troubleshooting
+
+[cols="1,1", options="header"]
+|===
+| Problem | Fix
+
+| `serviceaccount "kube-burner" not found` | Re-run Step 3 separately — always create SA first
+| Routes not appearing | Check `oc get ingresscontroller -A` — router must be running
+| `cannot create resource "routes"` | Add `route.openshift.io` to ClusterRole (see Step 3)
+| Namespaces stuck in `Terminating` | Check for lingering resources: `oc get all -n <ns>`
+| P99 > 20s | Reduce ITERATIONS — you've found the etcd write limit
+|===

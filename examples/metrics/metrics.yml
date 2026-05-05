@@ -1,0 +1,71 @@
+# Prometheus Metrics Profile
+# Defines which metrics to scrape during a kube-burner benchmark run.
+# Use with: kube-burner init -c config.yml -e metrics-endpoints.yml
+#
+# Each entry defines a PromQL query, a friendly metric name, and whether
+# it is a point-in-time (instant) or range query.
+
+# API Server CPU usage
+- query: irate(process_cpu_seconds_total{job="apiserver"}[2m])
+  metricName: apiserverCPU
+  instant: false
+
+# API Server memory (RSS)
+- query: process_resident_memory_bytes{job="apiserver"}
+  metricName: apiserverMemory
+  instant: false
+
+# etcd CPU usage
+- query: irate(process_cpu_seconds_total{job="etcd"}[2m])
+  metricName: etcdCPU
+  instant: false
+
+# etcd memory (RSS)
+- query: process_resident_memory_bytes{job="etcd"}
+  metricName: etcdMemory
+  instant: false
+
+# etcd DB size (bytes)
+- query: etcd_mvcc_db_total_size_in_bytes
+  metricName: etcdDBSize
+  instant: false
+
+# API server request latency (P99) — excludes WATCH/CONNECT
+- query: histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|CONNECT"}[2m])) by (le, resource, verb))
+  metricName: apiserverRequestP99Latency
+  instant: false
+
+# Controller manager CPU
+- query: irate(process_cpu_seconds_total{job="kube-controller-manager"}[2m])
+  metricName: kcmCPU
+  instant: false
+
+# Scheduler CPU
+- query: irate(process_cpu_seconds_total{job="kube-scheduler"}[2m])
+  metricName: schedulerCPU
+  instant: false
+
+# Scheduler binding latency P99
+- query: histogram_quantile(0.99, sum(rate(scheduler_binding_duration_seconds_bucket[2m])) by (le))
+  metricName: schedulerBindingP99
+  instant: false
+
+# Scheduler e2e scheduling latency P99
+- query: histogram_quantile(0.99, sum(rate(scheduler_e2e_scheduling_duration_seconds_bucket[2m])) by (le))
+  metricName: schedulerE2eP99
+  instant: false
+
+# Total number of running pods (snapshot at end)
+- query: count(kube_pod_info{namespace=~".*kube-burner.*"})
+  metricName: runningPodCount
+  instant: true
+
+# Node CPU usage (per node)
+- query: irate(node_cpu_seconds_total{mode!="idle"}[2m])
+  metricName: nodeCPU
+  instant: false
+
+# Node memory available (per node)
+- query: node_memory_MemAvailable_bytes
+  metricName: nodeMemoryAvailable
+  instant: false

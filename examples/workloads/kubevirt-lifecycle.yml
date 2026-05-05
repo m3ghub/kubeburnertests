@@ -1,0 +1,49 @@
+global:
+  gc: false
+
+jobs:
+  # Phase 1: Create a test VirtualMachine
+  - name: create-vm
+    jobType: create
+    jobIterations: 1
+    qps: 5
+    burst: 5
+    namespace: burner-virt-test
+    namespacedIterations: false
+    cleanup: true
+    waitWhenFinished: true
+    maxWaitTimeout: 5m
+    objects:
+      - objectTemplate: vm.yml
+        replicas: 1
+        wait: false        # VMs are not running yet, no pod to wait for
+
+  # Phase 2: Start the VM using kubevirt job type
+  - name: start-vm
+    jobType: kubevirt
+    executionMode: sequential
+    jobIterations: 1
+    jobPause: 10s
+    objects:
+      - kubeVirtOp: start
+        labelSelector: {kube-burner.io/job: create-vm}
+
+  # Phase 3: Stop the VM
+  - name: stop-vm
+    jobType: kubevirt
+    executionMode: sequential
+    jobIterations: 1
+    jobPause: 5s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector: {kube-burner.io/job: create-vm}
+        inputVars:
+          force: false
+
+  # Phase 4: Delete the VM
+  - name: delete-vm
+    jobType: delete
+    objects:
+      - kind: VirtualMachine
+        labelSelector: {kube-burner.io/job: create-vm}
+        apiVersion: kubevirt.io/v1

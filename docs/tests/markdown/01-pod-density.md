@@ -1,0 +1,297 @@
+# Test 01: Pod Density — How Fast Can Pods Start?
+
+> **Difficulty:** ⭐ Beginner  
+> **Time to run:** ~5 minutes  
+> **What it does:** Creates lots of pods as fast as possible and measures how long they take to become ready
+
+> **⚡ Pre-flight required:** Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see **[00-preflight.md](00-preflight.md)**.
+
+---
+
+## What is this test? 🚀
+
+Imagine you are a chef in a restaurant. A hundred customers walk in at the same time and all order food.  
+**How fast can your kitchen get every single meal ready?**
+
+That is exactly what the Pod Density test does — but for your Kubernetes cluster.  
+It asks the cluster to start **many pods all at once** and measures how long it takes every single one to be up and running.
+
+---
+
+## What does it measure?
+
+| Metric | What it means |
+|---|---|
+| **PodScheduled** | How long until the scheduler assigned the pod to a node |
+| **ContainersReady** | How long until all containers inside the pod were running |
+| **Ready** | How long until the pod was 100% ready to serve traffic |
+| **Initialized** | How long until the init containers (if any) finished |
+
+At the end you get **percentile numbers** (50th, 90th, 99th) so you know the worst-case timing, not just the average.
+
+---
+
+## How it works
+
+```
+  YOU                CLUSTER
+   │
+   │  oc apply -f job.yaml
+   ▼
+ ┌─────────────────────────────────────────────────────────┐
+ │  kube-burner Job (runs inside the cluster)              │
+ │                                                         │
+ │  1. Creates namespace  ──► burner-pod-density-0         │
+ │  2. Creates pods  ──► Pod Pod Pod Pod Pod Pod Pod Pod   │
+ │                         🟡  🟡  🟡  🟡  🟡  🟡  🟡  🟡  │
+ │                    (Pending → Scheduled → Ready)         │
+ │                         🟢  🟢  🟢  🟢  🟢  🟢  🟢  🟢  │
+ │  3. Measures latency for EVERY pod                      │
+ │  4. Prints results (99th percentile timing)             │
+ └─────────────────────────────────────────────────────────┘
+```
+
+**Pod lifecycle (what happens to each pod):**
+```
+Created ──► Pending ──► Scheduled ──► ContainerCreating ──► Running ──► Ready ✅
+    t=0        t+1s        t+2s              t+3s              t+4s      t+5s
+                 ↑            ↑                                            ↑
+           PodScheduled  (image pull)                                   Ready
+           measured here                                              measured here
+```
+
+---
+
+## Before you start ✅
+
+Check all boxes before running:
+
+- [ ] kube-burner is installed (`kube-burner version` works)
+- [ ] You are logged into your cluster (`oc whoami` or `oc get nodes`)
+- [ ] You have cluster-admin permissions
+- [ ] The RBAC has been applied (`oc get clusterrole kube-burner`)
+- [ ] Your cluster has at least 1 worker node with free CPU and memory
+
+---
+
+## Step-by-step guide
+
+### Step 1 — Create the namespace
+
+```bash
+oc new-project burner-pod-density
+```
+
+You should see:
+```
+Now using project "burner-pod-density" on server "..."
+```
+
+> **Remember:** Never use `kube-` at the start of the name in OpenShift — it is reserved!
+
+---
+
+### Step 2 — Apply RBAC (do this once per cluster)
+
+```bash
+oc apply -f examples/ocp-rbac.yaml
+```
+
+You should see:
+```
+serviceaccount/kube-burner created
+clusterrole.rbac.authorization.k8s.io/kube-burner created
+clusterrolebinding.rbac.authorization.k8s.io/kube-burner created
+```
+
+> Already applied? That is fine — oc will say `unchanged` and nothing breaks.
+
+---
+
+### Step 3 — Create the workload config
+
+Create `pod-density-config.yml`:
+
+```bash
+cat > /tmp/pod-density-config.yml << 'EOF'
+global:
+  gc: true
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+
+jobs:
+  - name: pod-density
+    namespace: burner-pod-density
+    jobType: create
+    jobIterations: 1
+    qps: 20
+    burst: 20
+    objects:
+      - objectTemplate: pod.yml
+        replicas: 50
+    waitWhenFinished: true
+    podWait: true
+    maxWaitTimeout: 5m
+EOF
+```
+
+Create `pod.yml` (the pod template):
+
+```bash
+cat > /tmp/pod.yml << 'EOF'
+kind: Pod
+apiVersion: v1
+metadata:
+  name: burner-pod-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner
+    job: pod-density
+spec:
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.9
+      resources:
+        requests:
+          cpu: 1m
+          memory: 10Mi
+EOF
+```
+
+---
+
+### Step 4 — Package config into a ConfigMap
+
+```bash
+oc create configmap pod-density-config \
+  --from-file=config.yml=/tmp/pod-density-config.yml \
+  --from-file=pod.yml=/tmp/pod.yml \
+  -n burner-pod-density
+```
+  --from-file=pod.yml=pod.yml \
+  -n burner-pod-density
+```
+
+---
+
+### Step 5 — Run the test!
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-pod-density
+  namespace: burner-pod-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=pod-density-test-001
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: pod-density-config
+        - name: workdir
+          emptyDir: {}
+EOF
+```
+
+---
+
+### Step 6 — Watch it run
+
+Open a **second terminal** and watch the pods being created:
+
+```bash
+oc get pods -n burner-pod-density -w
+```
+
+In your **first terminal**, stream the kube-burner logs:
+
+```bash
+oc logs -f job/kb-pod-density -n burner-pod-density
+```
+
+---
+
+### Step 7 — Read the results 🎉
+
+When the test finishes you will see something like this:
+
+```
+time="..." level=info msg="Triggering job: pod-density"
+time="..." level=info msg="burner-pod-density: 50/50 pods ready"
+time="..." level=info msg="pod-density: PodScheduled    50th: 0ms    99th: 500ms    max: 800ms"
+time="..." level=info msg="pod-density: ContainersReady 50th: 1500ms  99th: 2200ms   max: 2400ms"
+time="..." level=info msg="pod-density: Ready           50th: 1500ms  99th: 2200ms   max: 2400ms"
+time="..." level=info msg="Finished execution. UUID: pod-density-test-001"
+```
+
+**How to read these numbers:**
+
+| Number | Meaning |
+|---|---|
+| `50th: 1500ms` | Half of the pods were ready in under 1.5 seconds |
+| `99th: 2200ms` | 99 out of 100 pods were ready in under 2.2 seconds |
+| `max: 2400ms` | The very slowest pod took 2.4 seconds |
+
+**Good results on a healthy cluster:**
+- `PodScheduled 99th` under **1 second**
+- `Ready 99th` under **5 seconds**
+
+---
+
+### Step 8 — Clean up
+
+```bash
+oc delete job kb-pod-density -n burner-pod-density
+oc delete configmap pod-density-config -n burner-pod-density
+oc delete project burner-pod-density
+```
+
+---
+
+## Troubleshooting
+
+| Problem | What it means | Fix |
+|---|---|---|
+| Pods stuck in `Pending` for a long time | Not enough resources on nodes | Reduce `replicas` from 50 to 10 |
+| `permission denied` in logs | Log file write error | Check that `initContainer` copied config to `emptyDir` |
+| `events is forbidden` | RBAC missing events access | Re-apply `examples/ocp-rbac.yaml` |
+| `Too many pods` on SNO | 250-pod node limit | Reduce `replicas` to 10-15 max |
+| Test completes but numbers seem high | Nodes are under heavy load | Run when cluster is quiet |
+
+---
+
+## Try it yourself — challenge 🏆
+
+Once the basic test works, try changing the number of pods and see how it affects the results:
+
+1. Change `replicas: 50` to `replicas: 100` — does it get slower?
+2. Change `qps: 20` to `qps: 5` — does spreading the creation over more time help?
+3. Run the test twice in a row — are the results consistent?
+
+---
+
+*Next test: [02 — Node Density](02-node-density.md) — test how many Deployments your nodes can handle*

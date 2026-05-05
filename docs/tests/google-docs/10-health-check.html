@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 10: Health Check — Is the Cluster Feeling OK?</title>
+  <!--
+    GOOGLE DOCS IMPORT:
+    1. Go to https://docs.google.com
+    2. File > Open > Upload > select this file
+  -->
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  h4{font-size:11pt;color:#3c4043;margin-top:14px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}
+  thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}
+  tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+</style>
+</head>
+<body>
+<h1>Test 10: Health Check — Is the Cluster Feeling OK?</h1>
+<br>
+<div class="note"><strong>Difficulty:</strong> ⭐ Beginner — start here!  </div>
+<div class="note"><strong>Time to run:</strong> ~1 minute  </div>
+<div class="note"><strong>What it does:</strong> Quickly checks that the Kubernetes cluster is reachable and the API server is responding before you run any other test</div>
+<br>
+<hr>
+<br>
+<h2>What is this test? 🏥</h2>
+<br>
+<p>Before a doctor performs surgery, they check that the patient is healthy enough for the operation.  </p>
+<p>Before you run a big performance test, you should check that your cluster is healthy enough to be tested!</p>
+<br>
+<p><strong>Health Check</strong> does a quick examination:</p>
+<li>Can kube-burner reach the API server?</li>
+<li>Is the API server responding to requests?</li>
+<li>Are the basic Kubernetes APIs working?</li>
+<br>
+<p>Think of it as the <strong>"hello, are you there?"</strong> test. It's the first thing you should run whenever you log into a new cluster.</p>
+<br>
+<hr>
+<br>
+<h2>What does it check?</h2>
+<br>
+<pre>
+kube-burner health-check
+
+  ✅ Can connect to the API server?
+  ✅ Kubernetes API version is readable?
+  ✅ Node list is accessible?
+  ✅ Namespace list is accessible?
+
+  If all pass → "Cluster is healthy" 🟢
+  If any fail → "Check failed" 🔴 (fix before running other tests)
+</pre>
+<br>
+<hr>
+<br>
+<h2>Before you start ✅</h2>
+<br>
+<li>[ ] kube-burner installed (<code>kube-burner version</code>)</li>
+<li>[ ] Logged in (<code>oc whoami</code> or <code>oc config current-context</code>)</li>
+<li>[ ] 1 minute of time</li>
+<br>
+<hr>
+<br>
+<h2>Method A — Run locally (if you have local network access)</h2>
+<br>
+<p>If you can reach the cluster from your laptop:</p>
+<br>
+<pre>
+kube-burner health-check
+</pre>
+<br>
+<p>Expected output when the cluster is healthy:</p>
+<br>
+<pre>
+time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
+time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
+</pre>
+<br>
+<p>If you see an error like <code>Forbidden</code> or <code>connection refused</code>, your local machine cannot reach the cluster API server. Use Method B instead.</p>
+<br>
+<hr>
+<br>
+<h2>Method B — Run as an in-cluster Job (recommended for OpenShift)</h2>
+<br>
+<div class="step-hdr">Step 1 — Create the namespace</div>
+<br>
+<div class="note"><strong>Do this first — every other step depends on it.</strong></div>
+<br>
+<pre>
+oc new-project burner-health
+</pre>
+<br>
+<p>You should see:</p>
+<pre>
+Now using project "burner-health" on server "https://api.&lt;your-cluster&gt;:6443"
+</pre>
+<br>
+<div class="note"><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</div>
+<br>
+<div class="step-hdr">Step 2 — Set up RBAC</div>
+<br>
+<p>Every test needs a <code>ServiceAccount</code>, <code>ClusterRole</code>, and <code>ClusterRoleBinding</code>. Run all three commands — they are safe to re-run if any already exist.</p>
+<br>
+<p><strong>2a — Create the ServiceAccount in this namespace:</strong></p>
+<br>
+<pre>
+oc create serviceaccount kube-burner -n burner-health \
+  --dry-run=client -o yaml | oc apply -f -
+</pre>
+<br>
+<p><strong>2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):</strong></p>
+<br>
+<div class="note">These are applied inline below — no local file needed. Safe to re-run at any time.</div>
+<br>
+<pre>
+oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-health
+EOF
+</pre>
+<br>
+<p><strong>2c — Add this namespace to the ClusterRoleBinding:</strong></p>
+<br>
+<pre>
+oc patch clusterrolebinding kube-burner \
+  --type=json \
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-health"}}]' 2&gt;/dev/null || true
+</pre>
+<br>
+<div class="note">The <code>|| true</code> at the end means this command will not fail if the namespace is already listed. It is safe to run every time.</div>
+<br>
+<p><strong>Verify all three are in place before continuing:</strong></p>
+<br>
+<pre>
+oc get serviceaccount kube-burner -n burner-health
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
+</pre>
+<br>
+<p>The last command should include <code>burner-health</code> in the output.</p>
+<br>
+<div class="step-hdr">Step 3 — Run the health check as a Job</div>
+<br>
+<pre>
+cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-health-check
+  namespace: burner-health
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /tmp
+          command:
+            - kube-burner
+            - health-check
+EOF
+</pre>
+<br>
+<div class="step-hdr">Step 4 — Read the result</div>
+<br>
+<pre>
+oc logs job/kb-health-check -n burner-health
+</pre>
+<br>
+<p><strong>Healthy cluster output:</strong></p>
+<br>
+<pre>
+time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
+time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
+</pre>
+<br>
+<p><strong>Check the exit code:</strong></p>
+<br>
+<pre>
+oc get pod -l job-name=kb-health-check -n burner-health \
+  -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'
+# 0 = healthy ✅
+# non-zero = something is wrong ❌
+</pre>
+<br>
+<div class="step-hdr">Step 5 — Clean up</div>
+<br>
+<pre>
+oc delete job kb-health-check -n burner-health
+oc delete project burner-health
+</pre>
+<br>
+<hr>
+<br>
+<h2>What to do if the health check fails 🔴</h2>
+<br>
+<table>
+<thead><tr><th>Error message</th><th>What it means</th><th>What to do</th></tr></thead><tbody>
+<tr><td><code>connection refused</code></td><td>Cannot reach the API server</td><td>Check your <code>oc login</code> / kubeconfig</td></tr>
+<tr><td><code>Forbidden</code></td><td>No permission to read cluster info</td><td>Check RBAC — apply <code>ocp-rbac.yaml</code></td></tr>
+<tr><td><code>no such host</code></td><td>DNS resolution failed</td><td>Check network / VPN connection</td></tr>
+<tr><td><code>certificate verify failed</code></td><td>TLS certificate issue</td><td>Try <code>--insecure-skip-tls-verify=true</code> (test only!)</td></tr>
+<tr><td><code>timeout</code></td><td>Cluster is overloaded or unreachable</td><td>Wait and try again; check cluster status with your admin</td></tr>
+</tbody></table>
+<br>
+<hr>
+<br>
+<h2>Health check as part of your routine ⭐</h2>
+<br>
+<p>Make a habit of running the health check:</p>
+<li><strong>Before any benchmark</strong> — know the cluster was healthy at the start</li>
+<li><strong>After a benchmark</strong> — confirm the cluster returned to healthy state</li>
+<li><strong>When something seems wrong</strong> — first diagnostic step</li>
+<br>
+<hr>
+<br>
+<p><em>Next test: <a href="11-check-alerts.md">11 — Check Alerts</a> — verify that no Prometheus alerts are firing</em></p>
+<br>
+<div class="footer">
+  Kube-Burner v2.6.1 &mdash; Test Guide &mdash; 10-health-check<br>
+  Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
+</div>
+</body>
+</html>

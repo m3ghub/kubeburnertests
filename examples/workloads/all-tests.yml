@@ -1,0 +1,86 @@
+global:
+  gc: false          # We manage GC ourselves to demonstrate the destroy subcommand
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 60s
+
+# ─────────────────────────────────────────────
+# JOB 1: CREATE — baseline objects for all tests
+# ─────────────────────────────────────────────
+jobs:
+  - name: create-baseline
+    jobType: create
+    jobIterations: 3
+    qps: 10
+    burst: 10
+    namespace: burner-all-tests
+    namespacedIterations: true
+    cleanup: true
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 5m
+    objects:
+      - objectTemplate: deployment.yml
+        replicas: 1
+        inputVars:
+          podReplicas: 3
+          image: registry.k8s.io/pause:3.9
+          cpuRequest: "10m"
+          memRequest: "16Mi"
+
+      - objectTemplate: service.yml
+        replicas: 1
+
+      - objectTemplate: configmap.yml
+        replicas: 2
+
+# ─────────────────────────────────────────────
+# JOB 2: READ — read objects back at rate-limited QPS
+# ─────────────────────────────────────────────
+  - name: read-objects
+    jobType: read
+    jobIterations: 3
+    qps: 5
+    burst: 5
+    jobPause: 5s
+    objects:
+      - kind: Deployment
+        labelSelector: {kube-burner.io/job: create-baseline}
+        apiVersion: apps/v1
+
+      - kind: Service
+        labelSelector: {kube-burner.io/job: create-baseline}
+
+      - kind: ConfigMap
+        labelSelector: {kube-burner.io/job: create-baseline}
+
+# ─────────────────────────────────────────────
+# JOB 3: PATCH — add a label to all Deployments
+# ─────────────────────────────────────────────
+  - name: patch-deployments
+    jobType: patch
+    executionMode: sequential
+    jobIterations: 1
+    qps: 5
+    burst: 5
+    jobPause: 5s
+    objects:
+      - kind: Deployment
+        labelSelector: {kube-burner.io/job: create-baseline}
+        objectTemplate: patch-deployment.json
+        patchType: "application/strategic-merge-patch+json"
+        apiVersion: apps/v1
+
+# ─────────────────────────────────────────────
+# JOB 4: DELETE — remove ConfigMaps by label
+# ─────────────────────────────────────────────
+  - name: delete-configmaps
+    jobType: delete
+    jobPause: 5s
+    objects:
+      - kind: ConfigMap
+        labelSelector: {kube-burner.io/job: create-baseline}

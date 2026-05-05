@@ -1,0 +1,40 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # PHASE 1: CREATE — 3 CirrOS VMs, 128Mi each
+  # Baseline density test: all VMs boot, reach Running, hold 30s
+  # Boot time P99 target: < 60s on a healthy cluster
+  # ============================================================
+  - name: kubevirt-density
+    namespace: burner-kubevirt
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 5
+    burst: 5
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 3
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    jobPause: 30s
+
+  # ============================================================
+  # PHASE 2: DELETE — remove all VMs by label
+  # Matches label app=kube-burner-vm set by vm-template.yml
+  # Cluster should return to idle within 30s of this completing
+  # ============================================================
+  - name: kubevirt-delete
+    namespace: burner-kubevirt
+    jobType: delete
+    qps: 5
+    burst: 5
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          app: kube-burner-vm

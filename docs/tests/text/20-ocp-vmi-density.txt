@@ -1,0 +1,155 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                            20-OCP-VMI-DENSITY
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift Virtualization
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+       TEST 20: OCP VMI DENSITY -- HOW MANY VMs CAN BOOT AT ONCE?
+================================================================================
+
+  NOTE: Difficulty: ⭐⭐⭐⭐ Advanced
+  NOTE: Time to run: ~15-20 minutes
+  NOTE: What it does: Creates N VirtualMachineInstances simultaneously
+        and measures KubeVirt control-plane boot latency
+  NOTE: Requires: OpenShift Virtualization 4.x, multi-node cluster
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST? 🖥️🖥️🖥️
+--------------------------------------------------------------------------------
+
+Imagine every seat in a packed stadium is a virtual machine -- and you want
+all of them occupied and running at exactly the same time. The question isn't
+whether ONE VM can start. The question is whether the control plane can handle
+ALL of them starting simultaneously without falling over.
+
+This is the test that separates a real virtualisation platform from one that
+only works at small scale.
+
+Demo quote: "Watch the screen -- in the next 60 seconds you'll see N virtual
+machines boot simultaneously on your cluster. That's the same workload as
+replacing your entire VMware farm with OpenShift Virtualization."
+
+--------------------------------------------------------------------------------
+  WHAT IT MEASURES
+--------------------------------------------------------------------------------
+
+  Metric                          Description
+  -------                         -----------
+  VMI ready latency P50/P95/P99   Time from VMI creation to Running phase
+  virt-controller queue depth     How many VMIs awaiting reconciliation
+  virt-handler memory usage       RSS growth per additional VMI
+  Node memory pressure            OOM risk from guest memory
+
+--------------------------------------------------------------------------------
+  BROWSER TABS TO OPEN
+--------------------------------------------------------------------------------
+
+  Tab 1: Console (web terminal)
+  Tab 2: Virtualization -> VirtualMachines (VMs transitioning to Running)
+  Tab 3: Observe -> Metrics  (kubevirt_vmi_phase_count{phase="Running"})
+  Tab 4: Observe -> Dashboards -> KubeVirt / Infrastructure Resources /
+         Top Consumers (memory per node)
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP GUIDE
+--------------------------------------------------------------------------------
+
+STEP 1 -- VERIFY OPENSHIFT VIRTUALIZATION
+    oc whoami
+    oc get hyperconverged -A
+    oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+  The hyperconverged query must return a result. Note worker count.
+
+STEP 2 -- CHOOSE VM COUNT
+  Cluster size     Starter    Medium    Heavy
+  2-3 workers      5 VMs      10 VMs    20 VMs
+  4-6 workers      10 VMs     25 VMs    50 VMs
+  Memory rule: each VM needs ~512 MiB.
+
+STEP 3 -- CREATE PROJECT AND RBAC
+    oc new-project burner-vmi-density
+    oc create serviceaccount kube-burner -n burner-vmi-density
+  Apply ClusterRole (includes kubevirt.io) and ClusterRoleBinding.
+    oc get serviceaccount kube-burner -n burner-vmi-density
+    oc get clusterrole kube-burner
+    oc get clusterrolebinding kube-burner
+
+STEP 4 -- SET PARAMETERS
+    VM_COUNT=10
+    UUID="vmi-density-$(date +%s)"
+
+STEP 5 -- WRITE CONFIG AND VM TEMPLATE
+  Write /tmp/vmi-density-config.yml
+    - gc: false
+    - namespacedIterations: false
+    - vmiLatency measurement
+    - create-vms job (replicas: VM_COUNT, running: true)
+    - delete-vms job
+  Write /tmp/vm-template.yml
+    - running: true
+    - 512Mi memory
+    - cirros disk image
+
+STEP 6 -- CREATE CONFIGMAP
+    oc create configmap vmi-density-config \
+      --from-file=config.yml=/tmp/vmi-density-config.yml \
+      --from-file=vm-template.yml=/tmp/vm-template.yml \
+      -n burner-vmi-density
+    oc get configmap vmi-density-config -n burner-vmi-density
+
+STEP 7 -- LAUNCH THE JOB
+  Apply the Job YAML (kube-burner:v2.6.1, see markdown guide).
+
+STEP 8 -- WATCH AND STREAM LOGS
+    oc get pod -n burner-vmi-density -w
+  Wait for Running, then:
+    oc logs -f job/kb-vmi-density -n burner-vmi-density
+
+  WHAT TO SAY: "Watch the Virtualization screen -- each icon that turns green
+  is a VM that just booted. We started all of them at the same time. This is
+  the same workload as migrating your VMware estate to OpenShift."
+
+STEP 9 -- READ RESULTS
+    INFO vmiLatency:
+    INFO   P50:  32s
+    INFO   P95:  55s
+    INFO   P99:  78s
+    INFO Finished execution.
+
+STEP 10 -- CLEAN UP
+    oc delete job kb-vmi-density -n burner-vmi-density 2>/dev/null || true
+    oc delete configmap vmi-density-config -n burner-vmi-density 2>/dev/null || true
+    oc delete project burner-vmi-density
+    oc delete clusterrole kube-burner 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner 2>/dev/null || true
+    oc get projects | grep burner-vmi-density
+    oc get vm -A 2>/dev/null
+  Both should return nothing.
+
+--------------------------------------------------------------------------------
+  EXPECTED RESULTS
+--------------------------------------------------------------------------------
+
+  Cluster type        VMs     Expected P99
+  3 workers           10      30-60 s
+  3 workers           25      45-90 s
+  3 workers           50      90-180 s
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM                      FIX
+  no kind VirtualMachine       OpenShift Virtualization not installed
+  VMs stuck in Scheduling      Not enough RAM -- reduce VM_COUNT
+  serviceaccount not found     Re-run Step 3 separately
+  ImagePullBackOff on cirros   quay.io unreachable
+  virt-controller OOMKilled    Hard ceiling found -- reduce VM_COUNT
+
+================================================================================

@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 22C: OCP VMI High-Density Multi-OS Churn</title>
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .danger{border-left:4px solid #d93025;background:#fce8e6;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+  details{border:1px solid #dadce0;border-radius:4px;padding:4px 12px;margin:10px 0}
+  summary{cursor:pointer;font-weight:bold;padding:6px 0}
+  .bignum{font-size:28pt;font-weight:bold;color:#1a73e8;margin:0 6px}
+  </style>
+</head>
+<body>
+<h1>Test 22C: OCP VMI High-Density Multi-OS Churn</h1>
+<div class="note"><strong>Difficulty:</strong> &#9733;&#9733;&#9733;&#9733;&#9733; Expert &#8212; Production Scale</div>
+<div class="note"><strong>Time to run:</strong> 60&#8211;120 minutes</div>
+<div class="note"><strong>What it does:</strong> Same 4-round progressive structure as Test 22B, but with 10&#215; the VM density &#8212; 6 / 16 / 40 / 80 total VMs per round</div>
+<div class="note"><strong>Requires:</strong> OpenShift Virtualization 4.x, 6+ worker nodes, ~400 Gi free storage</div>
+<div class="warn"><strong>Run Test 22B first.</strong> This test uses the same structure as 22B. Complete 22B before pushing to production scale.</div>
+<hr>
+
+<h2>What is this test?</h2>
+<p>Test 22C is the same 4-round progressive design as Test 22B &#8212; same OS types, same resource profiles per VM, same churn structure. The only change is the number of VMs per round:</p>
+
+<table>
+<thead><tr><th></th><th>22B (warm-up)</th><th>22C (production scale)</th></tr></thead>
+<tbody>
+<tr><td>Round 1 (cirros)</td><td>6 VMs</td><td>6 VMs</td></tr>
+<tr><td>Round 2 (RHEL9)</td><td>4 VMs</td><td><strong>16 VMs</strong></td></tr>
+<tr><td>Round 3 (RHEL9 + Fedora)</td><td>3 + 3 = 6 VMs</td><td><strong>20 + 20 = 40 VMs</strong></td></tr>
+<tr><td>Round 4 (heavy mixed)</td><td>4 + 4 = 8 VMs</td><td><strong>40 + 40 = 80 VMs</strong></td></tr>
+</tbody>
+</table>
+
+<h3>Resource demand at peak (Round 4)</h3>
+<table>
+<thead><tr><th>Resource</th><th>Per VM</th><th>Total (80 VMs)</th></tr></thead>
+<tbody>
+<tr><td>vCPU</td><td>2</td><td><strong>160 vCPU</strong></td></tr>
+<tr><td>RAM</td><td>4 Gi</td><td><strong>320 Gi</strong></td></tr>
+<tr><td>Storage</td><td>30 Gi</td><td><strong>2.4 Ti</strong></td></tr>
+</tbody>
+</table>
+
+<div class="tip"><strong>What to say:</strong> &#8220;We didn&#8217;t just run a handful of VMs and call it a day. We ran 80 virtual machines across two operating systems, cycled them out and back twice, and the cluster came out the other side with boot times within 20% of the baseline, no stuck VMs, and a virt-controller memory footprint that returned to near where it started.&#8221;</div>
+<hr>
+
+<h2>Round breakdown</h2>
+<table>
+<thead><tr><th>Round</th><th>OS</th><th>VMs</th><th>vCPU</th><th>RAM each</th><th>Churn cycles</th><th>Approx time</th></tr></thead>
+<tbody>
+<tr><td>R01</td><td>cirros</td><td>6</td><td>1</td><td>512Mi</td><td>3</td><td>~5 min</td></tr>
+<tr><td>R02</td><td>RHEL9</td><td>16</td><td>1</td><td>2Gi</td><td>3</td><td>~25 min</td></tr>
+<tr><td>R03</td><td>RHEL9 + Fedora</td><td>20 + 20 = 40</td><td>1</td><td>2Gi</td><td>3</td><td>~40 min</td></tr>
+<tr><td>R04</td><td>RHEL9 + Fedora</td><td>40 + 40 = 80</td><td>2</td><td>4Gi</td><td>2</td><td>~50 min</td></tr>
+</tbody>
+</table>
+<hr>
+
+<h2>What it measures</h2>
+<table>
+<thead><tr><th>Metric</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td><strong>VMIRunning P99</strong></td><td>Boot latency at full fleet size</td></tr>
+<tr><td><strong>VMReady P99</strong></td><td>Cloud-init readiness at scale</td></tr>
+<tr><td><strong>virt-controller RSS</strong></td><td>Memory footprint &#8212; watch for drift between rounds</td></tr>
+<tr><td><strong>Delete duration</strong></td><td>Time to remove 20 or 40 VMs at once</td></tr>
+<tr><td><strong>CDI controller load</strong></td><td><em>New in 22C:</em> becomes visible at 40&#8211;80 concurrent PVC clones</td></tr>
+<tr><td><strong>Stuck VM count</strong></td><td>Must always be zero &#8212; any stuck VM at this scale is a critical finding</td></tr>
+</tbody>
+</table>
+<hr>
+
+<h2>Browser tabs to open</h2>
+<table>
+<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
+<tbody>
+<tr><td>Tab 1</td><td>Console (terminal)</td><td>Streaming kube-burner logs</td></tr>
+<tr><td>Tab 2</td><td>Virtualization &#8594; VirtualMachines</td><td>VM count climbing to 16, 40, 80</td></tr>
+<tr><td>Tab 3</td><td>Observe &#8594; Metrics</td><td><code>process_resident_memory_bytes{pod=~"virt-controller.*"}</code></td></tr>
+<tr><td>Tab 4</td><td>Observe &#8594; Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
+<tr><td>Tab 5</td><td>Observe &#8594; Metrics</td><td><code>rate(process_cpu_seconds_total{pod=~"cdi-deployment.*"}[2m]) * 1000</code></td></tr>
+</tbody>
+</table>
+<div class="tip"><strong>Tab 5 is new for 22C.</strong> At 40&#8211;80 concurrent PVC clones, the CDI controller load becomes measurable. In 22B the clone count was too low to see. Adding this query now gives you a live view of the image pipeline under pressure.</div>
+<hr>
+
+<h2>Pre-flight checklist</h2>
+<ul>
+<li>Test 22B completed successfully</li>
+<li>Logged into the OpenShift web console</li>
+<li>OpenShift Virtualization installed (<code>oc get hyperconverged -A</code>)</li>
+<li>Cluster-admin permissions</li>
+<li>RHEL9 DataSource ready</li>
+<li>Fedora DataSource ready</li>
+<li>At least 6 worker nodes</li>
+<li>~400 Gi free storage across workers</li>
+<li>~320 Gi free RAM across workers</li>
+</ul>
+<pre>oc get datasource rhel9 fedora -n openshift-virtualization-os-images
+oc get nodes -l node-role.kubernetes.io/worker \
+  -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory'</pre>
+<hr>
+
+<div class="step-hdr">Step 1 &#8212; Verify the cluster</div>
+<pre>oc whoami
+oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+oc get hyperconverged -A
+oc get datasource rhel9 fedora -n openshift-virtualization-os-images
+oc get nodes -l node-role.kubernetes.io/worker \
+  -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory'</pre>
+<p>Both DataSources must show <strong>READY: True</strong>. Verify RAM headroom before continuing.</p>
+
+<div class="step-hdr">Step 2 &#8212; Create project and RBAC</div>
+<pre>oc new-project burner-test22c
+oc create serviceaccount kube-burner -n burner-test22c</pre>
+<pre>oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner-test22c
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes, datasources, dataimportcrons]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-test22c
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner-test22c
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-test22c
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-test22c-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-test22c
+EOF</pre>
+<pre>oc get serviceaccount kube-burner -n burner-test22c
+oc get clusterrole kube-burner-test22c
+oc get clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring</pre>
+
+<div class="step-hdr">Step 3 &#8212; Write the 6 VM template files</div>
+<p>Structurally identical to 22B &#8212; only the <code>app: test22c-churn</code> label differs. Replica counts live in the config file, not here.</p>
+
+<h3>File 1 &#8212; vm-r1-cirros.yml</h3>
+<pre>cat &gt; /tmp/vm-r1-cirros.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r1-cirros-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r01
+    os: cirros
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r01
+        os: cirros
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+EOF</pre>
+
+<h3>File 2 &#8212; vm-r2-rhel9.yml</h3>
+<pre>cat &gt; /tmp/vm-r2-rhel9.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r2-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r02
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r2-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r02
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r2-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r2-rhel9-{{.Iteration}}-{{.Replica}}
+EOF</pre>
+
+<h3>File 3 &#8212; vm-r3-rhel9.yml</h3>
+<pre>cat &gt; /tmp/vm-r3-rhel9.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r3-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r03
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r3-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r03
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r3-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r3-rhel9-{{.Iteration}}-{{.Replica}}
+EOF</pre>
+
+<h3>File 4 &#8212; vm-r3-fedora.yml</h3>
+<pre>cat &gt; /tmp/vm-r3-fedora.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r3-fedora-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r03
+    os: fedora
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r3-fedora-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r03
+        os: fedora
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r3-fedora-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r3-fedora-{{.Iteration}}-{{.Replica}}
+EOF</pre>
+
+<h3>File 5 &#8212; vm-r4-rhel9.yml (2 vCPU / 4Gi)</h3>
+<pre>cat &gt; /tmp/vm-r4-rhel9.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r4-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r04
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r4-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r04
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r4-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r4-rhel9-{{.Iteration}}-{{.Replica}}
+EOF</pre>
+
+<h3>File 6 &#8212; vm-r4-fedora.yml (2 vCPU / 4Gi)</h3>
+<pre>cat &gt; /tmp/vm-r4-fedora.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r4-fedora-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r04
+    os: fedora
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r4-fedora-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r04
+        os: fedora
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r4-fedora-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r4-fedora-{{.Iteration}}-{{.Replica}}
+EOF</pre>
+
+<div class="step-hdr">Step 4 &#8212; Get the main config file</div>
+<div class="tip"><strong>Option A &#8212; Download from repo (recommended)</strong></div>
+<pre>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/22c-ocp-vmi-high-density-churn"
+
+curl --fail -sL "${BASE}/test22c-churn-config.yml" -o /tmp/test22c-churn-config.yml</pre>
+<p>Verify (must print <code>global:</code> on the first line):</p>
+<pre>head -1 /tmp/test22c-churn-config.yml</pre>
+<div class="note">The key difference from 22B is the replica counts: R01=6 (same), R02=16, R03=20+20, R04=40+40. Everything else in the config structure is identical.</div>
+
+<div class="step-hdr">Step 5 &#8212; Verify all 7 files exist</div>
+<pre>ls -lh /tmp/test22c-churn-config.yml \
+        /tmp/vm-r1-cirros.yml \
+        /tmp/vm-r2-rhel9.yml \
+        /tmp/vm-r3-rhel9.yml \
+        /tmp/vm-r3-fedora.yml \
+        /tmp/vm-r4-rhel9.yml \
+        /tmp/vm-r4-fedora.yml</pre>
+
+<div class="step-hdr">Step 6 &#8212; Create the ConfigMap</div>
+<pre>oc create configmap test22c-churn-config \
+  --from-file=config.yml=/tmp/test22c-churn-config.yml \
+  --from-file=vm-r1-cirros.yml=/tmp/vm-r1-cirros.yml \
+  --from-file=vm-r2-rhel9.yml=/tmp/vm-r2-rhel9.yml \
+  --from-file=vm-r3-rhel9.yml=/tmp/vm-r3-rhel9.yml \
+  --from-file=vm-r3-fedora.yml=/tmp/vm-r3-fedora.yml \
+  --from-file=vm-r4-rhel9.yml=/tmp/vm-r4-rhel9.yml \
+  --from-file=vm-r4-fedora.yml=/tmp/vm-r4-fedora.yml \
+  -n burner-test22c
+
+oc get configmap test22c-churn-config -n burner-test22c</pre>
+<p>Expected: <code>configmap/test22c-churn-config created</code> with <strong>DATA: 7</strong>.</p>
+
+<div class="step-hdr">Step 7 &#8212; Switch to Tab 2 (Virtualization &#8594; VirtualMachines)</div>
+<p>Filter to <code>burner-test22c</code>. The visual experience is different from 22B &#8212; the VM count climbs much higher:</p>
+<ul>
+<li><strong>R01:</strong> 6 VMs &#8212; same fast cirros baseline</li>
+<li><strong>R02:</strong> 16 VMs &#8212; list fills up, all RHEL9</li>
+<li><strong>R03:</strong> 40 VMs &#8212; dense list, both RHEL9 and Fedora names visible. Churn drops 20 at a time.</li>
+<li><strong>R04:</strong> 80 VMs &#8212; screen fills. Churn drops 40 at a time — highly visible.</li>
+</ul>
+
+<div class="step-hdr">Step 8 &#8212; Set up Observe queries</div>
+<pre>process_resident_memory_bytes{pod=~"virt-controller.*"}</pre>
+<pre>kubevirt_vmi_phase_count{phase="Running"}</pre>
+<pre>rate(process_cpu_seconds_total{pod=~"virt-handler.*"}[2m]) * 1000</pre>
+<pre>rate(process_cpu_seconds_total{pod=~"cdi-deployment.*"}[2m]) * 1000</pre>
+<div class="tip">The CDI query is new for 22C. At 40&#8211;80 concurrent PVC clones, the image cloning pipeline becomes measurable. This is something you cannot show in 22B &#8212; it only appears at this density.</div>
+
+<div class="step-hdr">Step 9 &#8212; Launch the kube-burner job</div>
+<pre>UUID="test22c-$(date +%s)"
+echo "UUID: $UUID"
+
+cat &lt;&lt; JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-test22c-churn
+  namespace: burner-test22c
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: test22c-churn-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML</pre>
+
+<div class="step-hdr">Step 10 &#8212; Stream logs</div>
+<pre>oc get pod -n burner-test22c -w</pre>
+<pre>oc logs -f job/kb-test22c-churn -n burner-test22c</pre>
+
+<div class="step-hdr">Step 11 &#8212; What to say at each phase</div>
+<p><strong>During R01 (6 cirros):</strong> &#8220;Same control-plane warm-up as 22B. Baseline established.&#8221;</p>
+<p><strong>During R02 (16 RHEL9):</strong> &#8220;Now we&#8217;re at 16 real RHEL9 VMs &#8212; 480 Gi of clone operations running in parallel. Watch Tab 2 as they all try to reach Running state simultaneously.&#8221;</p>
+<p><strong>During R03 (40 mixed):</strong> &#8220;Two operating systems, 40 VMs total. Watch the CDI query &#8212; at this scale the clone controller becomes visible in the metrics. You only see this at real production density.&#8221;</p>
+<p><strong>During R04 (80 VMs):</strong> &#8220;Full wall test &#8212; 80 VMs, 160 vCPU, 320 Gi RAM. When churn starts, 40 VMs disappear and 40 new ones clone and boot. If virt-controller RSS returns to near-baseline after R04, this cluster is production-ready.&#8221;</p>
+
+<div class="step-hdr">Step 12 &#8212; What good looks like</div>
+<table>
+<thead><tr><th>Metric</th><th>Healthy</th><th>Investigate</th></tr></thead>
+<tbody>
+<tr><td>R01 VMIRunning P99</td><td>&lt; 30s</td><td>&gt; 60s</td></tr>
+<tr><td>R02 VMIRunning P99</td><td>&lt; 90s</td><td>&gt; 5 minutes</td></tr>
+<tr><td>R03 VMIRunning P99</td><td>&lt; 120s</td><td>&gt; 8 minutes</td></tr>
+<tr><td>R04 VMIRunning P99</td><td>&lt; 180s</td><td>&gt; 12 minutes</td></tr>
+<tr><td>virt-controller RSS peak</td><td>&lt; 400 MiB</td><td>&gt; 800 MiB</td></tr>
+<tr><td>virt-controller RSS after test</td><td>Returns toward baseline</td><td>Keeps climbing</td></tr>
+<tr><td>Stuck VMs at end of any round</td><td>0</td><td>Any</td></tr>
+<tr><td>Final VM count</td><td>0</td><td>Any remaining</td></tr>
+</tbody>
+</table>
+<div class="note">Thresholds are higher than 22B because at 16&#8211;80 VMs, CDI clone queue depth and scheduler pack time both increase. Graceful scaling is the pass criteria &#8212; not matching 22B&#8217;s absolute numbers.</div>
+
+<div class="step-hdr">Step 13 &#8212; Clean up</div>
+<pre>oc delete job kb-test22c-churn -n burner-test22c 2>/dev/null || true
+oc delete vm -l app=test22c-churn -n burner-test22c 2>/dev/null || true
+oc delete configmap test22c-churn-config -n burner-test22c 2>/dev/null || true
+oc delete project burner-test22c
+oc delete clusterrole kube-burner-test22c 2>/dev/null || true
+oc delete clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring 2>/dev/null || true</pre>
+<pre>oc get projects | grep burner-test22c
+oc get vm -A 2>/dev/null | grep test22c</pre>
+<hr>
+
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>R04 VMs stuck in Pending</td><td>Insufficient RAM &#8212; reduce R04 replicas from 40 to 20</td></tr>
+<tr><td>R03/R04 VMIRunning timeout</td><td>CDI clone queue saturated &#8212; <code>oc get datavolumes -A</code> for stuck clones</td></tr>
+<tr><td>R02 taking &gt; 30 minutes</td><td>First run &#8212; RHEL9 not cached on nodes; subsequent rounds faster</td></tr>
+<tr><td>no space left on device</td><td>Storage class full &#8212; reduce replicas or audit with <code>oc get pvc -A</code></td></tr>
+<tr><td>ConfigMap already exists</td><td><code>oc delete configmap test22c-churn-config -n burner-test22c</code></td></tr>
+<tr><td>R04 job times out at 60m</td><td>Cluster undersized for 80 VMs &#8212; reduce R04 replicas</td></tr>
+</tbody>
+</table>
+<hr>
+
+<h2>How 22B and 22C fit together</h2>
+<table>
+<thead><tr><th></th><th>22B</th><th>22C</th></tr></thead>
+<tbody>
+<tr><td>Purpose</td><td>Prove the structure works; warm up the cluster</td><td>Push to production-scale density</td></tr>
+<tr><td>Total VMs per run</td><td>6 / 6 / 6 / 8</td><td><strong>6 / 16 / 40 / 80</strong></td></tr>
+<tr><td>Duration</td><td>20&#8211;30 min</td><td>60&#8211;120 min</td></tr>
+<tr><td>Cluster size</td><td>3+ workers</td><td><strong>6+ workers</strong></td></tr>
+<tr><td>CDI visible in metrics?</td><td>No</td><td><strong>Yes</strong></td></tr>
+<tr><td>Customer narrative</td><td>&#8220;The foundation is solid&#8221;</td><td>&#8220;Production-scale &#8212; and it held&#8221;</td></tr>
+</tbody>
+</table>
+
+<div class="footer">
+  Test 22C follows Test 22B. Together they form the complete progressive churn sequence:
+  22B confirms structure, 22C confirms scale.
+  <br><br>
+  Kube-Burner v2.6.1 | OpenShift Virtualization | github.com/kube-burner/kube-burner
+</div>
+</body>
+</html>

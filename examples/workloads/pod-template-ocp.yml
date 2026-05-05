@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: burner-pod-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner
+    iteration: "{{.Iteration}}"
+    kube-burner-job: "{{.JobName}}"
+spec:
+  containers:
+    - name: pause
+      image: "{{.image}}"
+      resources:
+        requests:
+          cpu: "{{.cpuRequest}}"
+          memory: "{{.memRequest}}"
+  terminationGracePeriodSeconds: 0
+  restartPolicy: Never

@@ -1,0 +1,108 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 40,
+      "y": 15,
+      "width": 820,
+      "height": 30,
+      "text": "Test 25: Mixed VM Fleet Density — 70% Windows / 30% RHEL",
+      "fontSize": 22,
+      "fontFamily": 2,
+      "textAlign": "center",
+      "strokeColor": "#5a0fc8",
+      "fillStyle": "solid"
+    },
+    {
+      "id": "sub",
+      "type": "text",
+      "x": 40,
+      "y": 52,
+      "width": 820,
+      "height": 20,
+      "text": "The most realistic enterprise demo: Windows + Linux running simultaneously on one platform",
+      "fontSize": 13,
+      "fontFamily": 2,
+      "textAlign": "center",
+      "strokeColor": "#444444"
+    },
+    {
+      "id": "job",
+      "type": "rectangle",
+      "x": 40,
+      "y": 95,
+      "width": 160,
+      "height": 140,
+      "strokeColor": "#5a0fc8",
+      "fillStyle": "solid",
+      "backgroundColor": "#f0eeff",
+      "label": {"text": "kube-burner\nJob\n\ncreates:\nJob1 → Windows\nJob2 → RHEL", "fontSize": 13}
+    },
+    {
+      "id": "wbox",
+      "type": "rectangle",
+      "x": 260,
+      "y": 95,
+      "width": 260,
+      "height": 60,
+      "strokeColor": "#0078D4",
+      "fillStyle": "solid",
+      "backgroundColor": "#deecf9",
+      "label": {"text": "Windows VMs (70%)  |  4 Gi RAM  |  2 CPUs\nDataVolume clone from win2k22  →  boots 3-8 min", "fontSize": 12}
+    },
+    {
+      "id": "rbox",
+      "type": "rectangle",
+      "x": 260,
+      "y": 175,
+      "width": 260,
+      "height": 60,
+      "strokeColor": "#CC0000",
+      "fillStyle": "solid",
+      "backgroundColor": "#fde8e8",
+      "label": {"text": "RHEL 9 VMs (30%)   |  2 Gi RAM  |  1 CPU\ncontainerDisk rhel9:9.0  →  boots 60-120 s", "fontSize": 12}
+    },
+    {
+      "id": "running",
+      "type": "rectangle",
+      "x": 580,
+      "y": 115,
+      "width": 200,
+      "height": 100,
+      "strokeColor": "#188038",
+      "fillStyle": "solid",
+      "backgroundColor": "#e6f4ea",
+      "label": {"text": "All VMs Running\n\nRHEL finishes first\nWindows follows\n\nvmiLatency P99", "fontSize": 13}
+    },
+    {
+      "id": "measure",
+      "type": "rectangle",
+      "x": 40,
+      "y": 265,
+      "width": 740,
+      "height": 55,
+      "strokeColor": "#e37400",
+      "fillStyle": "solid",
+      "backgroundColor": "#fef3e2",
+      "label": {"text": "📊 P99 gated by Windows boot time  |  10 VM fleet = 7 Win + 3 RHEL  |  ~34 Gi total RAM", "fontSize": 13}
+    },
+    {
+      "id": "note",
+      "type": "text",
+      "x": 40,
+      "y": 336,
+      "width": 740,
+      "height": 35,
+      "text": "🔀 RHEL VMs reach Running while Windows is still booting — this side-by-side view IS the demo. Two OS families, one platform.",
+      "fontSize": 12,
+      "fontFamily": 2,
+      "strokeColor": "#555555"
+    }
+  ],
+  "appState": {"viewBackgroundColor": "#ffffff", "currentItemFontFamily": 2},
+  "files": {}
+}

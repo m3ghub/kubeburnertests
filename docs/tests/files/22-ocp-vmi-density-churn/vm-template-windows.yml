@@ -1,0 +1,68 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-churn-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: mixed-churn
+    os: windows2022
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: win-churn-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        source:
+          pvc:
+            name: win2k22          # change to your Windows golden image PVC name
+            namespace: openshift-virtualization-os-images
+        storage:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 60Gi        # match your golden image size
+  template:
+    metadata:
+      labels:
+        app: mixed-churn
+        os: windows2022
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 8Gi
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            spinlocks:
+              spinlocks: 8191
+            vapic: {}
+        clock:
+          utc: {}
+          timer:
+            hpet:
+              present: false
+            pit:
+              tickPolicy: delay
+            rtc:
+              tickPolicy: catchup
+            hyperv: {}
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: win-churn-disk-{{.Iteration}}-{{.Replica}}

@@ -1,0 +1,311 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                         22-OCP-VMI-DENSITY-CHURN
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift Virtualization
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+   TEST 22: OCP VMI DENSITY + CHURN -- THE ULTIMATE SOAK TEST
+================================================================================
+
+  NOTE: Difficulty: ⭐⭐⭐⭐⭐ Expert
+  NOTE: Time to run: 30-60 minutes (configurable)
+  NOTE: What it does: Brings up N VMs, then continuously deletes and recreates
+        a percentage in cycles -- the closest thing to a real production day on
+        an OpenShift Virtualization cluster
+  NOTE: Requires: OpenShift Virtualization 4.x, multi-node cluster
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST? 🔄🖥️
+--------------------------------------------------------------------------------
+
+Imagine the VMI density test (Test 20) -- but instead of turning it off after
+everything is running, you leave it on for 30-60 minutes and keep pulling
+virtual machines out and replacing them in a continuous cycle, like a conveyor
+belt that never stops.
+
+This is the test that finds the problems no 5-minute benchmark ever catches:
+  - Memory leaks
+  - Stale objects piling up in etcd
+  - virt-handler slowly grinding to a halt
+  - virt-launcher pods that never finish terminating
+  - API server watch streams falling behind
+
+Demo quote: "This isn't a sprint -- it's a marathon. We're running your VM
+workload continuously for 30 minutes, churning machines in and out the way
+your production automation would."
+
+--------------------------------------------------------------------------------
+  HOW IT WORKS
+--------------------------------------------------------------------------------
+
+  Phase 1 -- Density
+    Creates N VMs with running: true
+    Waits for all to reach Running
+    Records vmiLatency P50/P95/P99
+
+  Phase 2 -- Churn (repeats in cycles)
+    Delete job: removes CHURN_VMS VMs
+    Create job: recreates the same number
+    Waits for all to reach Running
+    Repeats for CHURN_CYCLES cycles
+
+  Phase 3 -- Final delete
+    Removes all remaining VMs cleanly
+
+--------------------------------------------------------------------------------
+  WHAT IT MEASURES
+--------------------------------------------------------------------------------
+
+  Metric                     What it means
+  -------                    -------------
+  VMI boot time P50/P95/P99  Baseline latency in density phase
+  Churn cycle duration        Time for one delete+recreate cycle
+  virt-controller memory      Should stay flat -- growing = memory leak
+  Stuck VM count              VMs that never reach Running (should be 0)
+
+--------------------------------------------------------------------------------
+  BROWSER TABS TO OPEN
+--------------------------------------------------------------------------------
+
+  Tab 1: Console (web terminal)
+  Tab 2: Virtualization -> VirtualMachines (count fluctuating during churn)
+  Tab 3: Observe -> Metrics
+         (process_resident_memory_bytes{pod=~"virt-controller.*"})
+  Tab 4: Observe -> Dashboards -> KubeVirt / Infrastructure Resources /
+         Top Consumers
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP GUIDE
+--------------------------------------------------------------------------------
+
+STEP 1 -- VERIFY OPENSHIFT VIRTUALIZATION
+    oc whoami
+    oc get hyperconverged -A
+    oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+  Must return a result for hyperconverged. Need at least 2 workers.
+
+STEP 2 -- CHOOSE PARAMETERS
+  Cluster size    TOTAL_VMS  CHURN_VMS  CHURN_CYCLES
+  2-3 workers     6          2          3
+  4-6 workers     15         3          5
+  6+ workers      30         6          5
+
+STEP 3 -- CREATE PROJECT AND RBAC
+    oc new-project burner-vmi-churn
+    oc create serviceaccount kube-burner -n burner-vmi-churn
+  Apply ClusterRole (includes kubevirt.io) and ClusterRoleBinding.
+    oc get serviceaccount kube-burner -n burner-vmi-churn
+    oc get clusterrole kube-burner
+    oc get clusterrolebinding kube-burner
+  All three must return a result.
+
+STEP 4 -- SET PARAMETERS
+    TOTAL_VMS=6
+    CHURN_VMS=2
+    CHURN_CYCLES=3
+    UUID="vmi-churn-$(date +%s)"
+
+STEP 5 -- WRITE CONFIG AND VM TEMPLATE
+  Write /tmp/vmi-churn-config.yml with:
+    - gc: false
+    - namespacedIterations: false
+    - vmiLatency measurement
+    - density-phase job (replicas: TOTAL_VMS, running: true)
+    - churn-delete-1 / churn-create-1 / churn-delete-2 / churn-create-2 ...
+      (labelSelectors use kube-burner.io/job: <job-name> in v2.6.1)
+    - final-delete job
+  Write /tmp/vmi-churn-template.yml (running: true, 512Mi, cirros disk)
+
+STEP 5B -- VERIFY BOTH FILES EXIST
+    ls -lh /tmp/vmi-churn-config.yml \
+            /tmp/vmi-churn-template.yml
+  Both must show non-zero sizes. If either is missing, re-run Step 5.
+
+STEP 6 -- CREATE CONFIGMAP
+    oc create configmap vmi-churn-config \
+      --from-file=config.yml=/tmp/vmi-churn-config.yml \
+      --from-file=vm-template.yml=/tmp/vmi-churn-template.yml \
+      -n burner-vmi-churn
+    oc get configmap vmi-churn-config -n burner-vmi-churn
+
+STEP 7 -- LAUNCH THE JOB
+  Apply the Job YAML (kube-burner:v2.6.1, see markdown guide).
+    oc get pod -n burner-vmi-churn -w
+  Wait for Running, then:
+    oc logs -f job/kb-vmi-churn -n burner-vmi-churn
+
+STEP 8 -- WATCH THE THREE KEY SIGNALS
+
+  SIGNAL 1 -- Tab 2 (Virtualization -> VirtualMachines):
+    VM count climbs during density phase, dips and recovers with each churn
+    cycle. Steady recovery = healthy.
+
+  SIGNAL 2 -- Tab 3 (Observe -> Metrics):
+    process_resident_memory_bytes{pod=~"virt-controller.*"}
+    Should be FLAT. Steady growth = memory leak.
+
+  SIGNAL 3 -- Tab 3 second query:
+    kubevirt_vmi_phase_count{phase="Running"}
+    Should dip and recover with each cycle.
+
+STEP 9 -- WHAT TO SAY AT EACH PHASE
+
+  During density phase:
+    "Watch the count -- we're bringing up VMs across all worker nodes
+    simultaneously."
+
+  During first churn cycle:
+    "Now we're churning -- deleting VMs and replacing them. This is what
+    your production automation looks like."
+
+  After 20 minutes:
+    "We've been running for 20 minutes. Look at the virt-controller memory --
+    it's holding flat. No memory leak. The platform is healthy."
+
+STEP 10 -- RED FLAGS
+
+  Signal                             Meaning
+  virt-controller RSS >10 MB/cycle   Memory leak
+  Terminating pods stuck >2 min      virt-handler not cleaning up
+  Running count not recovering       VMs failing to recreate
+  Job exits early                    API timeout -- check logs
+
+STEP 11 -- READ FINAL RESULTS
+    INFO vmiLatency: P50=42s P95=67s P99=89s
+    INFO Finished execution.
+
+  What good looks like:
+    P99 boot time          < 90s      (investigate if > 3 minutes)
+    virt-controller delta  < 50 MB    (investigate if > 10 MB per cycle)
+    Stuck VMs at end       0          (investigate any)
+
+STEP 12 -- CLEAN UP
+    oc delete job kb-vmi-churn -n burner-vmi-churn 2>/dev/null || true
+    oc delete vm -A -l app=vmi-churn 2>/dev/null || true
+    oc delete configmap vmi-churn-config -n burner-vmi-churn 2>/dev/null || true
+    oc delete project burner-vmi-churn
+    oc delete clusterrole kube-burner 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner 2>/dev/null || true
+    oc get projects | grep burner-vmi-churn
+    oc get vm -A 2>/dev/null
+  Both should return nothing.
+
+================================================================================
+  SET IT AND FORGET IT -- MIXED WINDOWS + RHEL CHURN
+================================================================================
+
+  5-round automated soak: each round creates a mixed fleet of Windows Server +
+  RHEL VMs, churns them through full-rotation cycles (delete all Windows ->
+  recreate Windows -> delete all RHEL -> recreate RHEL), cleans up, then moves
+  to the next heavier round.
+
+  ROUND SUMMARY
+  Round  Windows  RHEL  Total  Churn Cycles  RAM Needed
+  -----  -------  ----  -----  ------------  ----------
+  1      4        2     6      3             ~36 Gi
+  2      7        3     10     3             ~62 Gi
+  3      14       6     20     3             ~124 Gi
+  4      21       9     30     2             ~186 Gi
+  5      28       12    40     2             ~248 Gi
+
+  NOTE: Full 5-round run can take 4-8 hours. Storage: each Windows VM clones
+        a 60 Gi PVC (released after each round's final cleanup).
+
+STEP 1 -- CREATE PROJECT AND RBAC
+    oc new-project burner-mixed-churn
+    oc create serviceaccount kube-burner -n burner-mixed-churn
+  Apply ClusterRole kube-burner-virt (includes kubevirt.io + cdi.kubevirt.io)
+  and ClusterRoleBinding kube-burner-virt-mixed-churn (see markdown guide for
+  full YAML).
+    oc get serviceaccount kube-burner -n burner-mixed-churn
+    oc get clusterrolebinding kube-burner-virt-mixed-churn
+
+STEP 2 -- CHECK GOLDEN IMAGES
+    oc get pvc -n openshift-virtualization-os-images | grep win2k22
+    oc get datasource rhel9 -n openshift-virtualization-os-images
+    oc adm top nodes
+  If win2k22 is not the PVC name, find yours:
+    oc get pvc -n openshift-virtualization-os-images | grep -i win
+  Edit vm-template-windows.yml and update the name: field under source.pvc.
+
+STEP 3 -- DOWNLOAD CONFIG FILES
+  Option A (from repo):
+    BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/22-ocp-vmi-density-churn"
+    curl --fail -sL "${BASE}/mixed-churn-config.yml"   -o /tmp/mixed-churn-config.yml
+    curl --fail -sL "${BASE}/vm-template-windows.yml"  -o /tmp/vm-template-windows.yml
+    curl --fail -sL "${BASE}/vm-template-rhel.yml"     -o /tmp/vm-template-rhel.yml
+  Verify downloads:
+    head -1 /tmp/mixed-churn-config.yml     # must print: global:
+    head -1 /tmp/vm-template-windows.yml    # must print: apiVersion: kubevirt.io/v1
+    head -1 /tmp/vm-template-rhel.yml       # must print: apiVersion: kubevirt.io/v1
+  Option B: see markdown guide for manual paste instructions (3 paste blocks).
+
+STEP 3B -- VERIFY ALL 3 FILES EXIST
+    ls -lh /tmp/mixed-churn-config.yml \
+            /tmp/vm-template-windows.yml \
+            /tmp/vm-template-rhel.yml
+  All 3 must show non-zero sizes. If any is missing, re-run Step 3.
+
+STEP 4 -- CREATE CONFIGMAP
+    UUID="mixed-churn-$(date +%s)"
+    oc create configmap mixed-churn-config \
+      --from-file=config.yml=/tmp/mixed-churn-config.yml \
+      --from-file=vm-template-windows.yml=/tmp/vm-template-windows.yml \
+      --from-file=vm-template-rhel.yml=/tmp/vm-template-rhel.yml \
+      -n burner-mixed-churn
+    oc get configmap mixed-churn-config -n burner-mixed-churn
+
+STEP 5 -- LAUNCH THE JOB
+  Apply the Job YAML (see markdown guide for full YAML):
+    oc get pod -n burner-mixed-churn -w
+  Wait for Running, then:
+    oc logs -f job/kb-mixed-churn -n burner-mixed-churn
+
+STEP 6 -- MONITOR PROGRESS
+  VM counts during run:
+    oc get vm -n burner-mixed-churn --no-headers | wc -l
+    oc get vm -n burner-mixed-churn -l os=windows2022 --no-headers | wc -l
+    oc get vm -n burner-mixed-churn -l os=rhel9 --no-headers | wc -l
+  Memory leak check (Observe -> Metrics):
+    process_resident_memory_bytes{pod=~"virt-controller.*"}
+
+FORCE-STOP IF STUCK
+    oc delete job kb-mixed-churn -n burner-mixed-churn 2>/dev/null || true
+    oc delete configmap mixed-churn-config -n burner-mixed-churn 2>/dev/null || true
+    oc delete vm -l os=windows2022 -n burner-mixed-churn 2>/dev/null || true
+    oc delete vm -l os=rhel9 -n burner-mixed-churn 2>/dev/null || true
+    oc get vm -n burner-mixed-churn
+
+FINAL CLEANUP
+    oc delete job kb-mixed-churn -n burner-mixed-churn 2>/dev/null || true
+    oc delete vm -l app=mixed-churn -n burner-mixed-churn 2>/dev/null || true
+    oc delete configmap mixed-churn-config -n burner-mixed-churn 2>/dev/null || true
+    oc delete project burner-mixed-churn
+    oc delete clusterrole kube-burner-virt 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner-virt-mixed-churn 2>/dev/null || true
+    oc get projects | grep burner-mixed-churn
+    oc get vm -A 2>/dev/null | grep mixed-churn
+  Both should return nothing.
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM                         FIX
+  serviceaccount not found        Re-run Step 3 -- always create SA separately
+  ImagePullBackOff                quay.io unreachable -- check pull secrets
+  no kind VirtualMachine          OpenShift Virtualization not installed
+  Configmap already exists        oc delete configmap vmi-churn-config -n burner-vmi-churn
+  VMs not recovering              Reduce CHURN_VMS -- reconciler queue backed up
+  virt-controller OOMKilled       Hard ceiling found -- reduce TOTAL_VMS
+
+================================================================================
+This is the final test. If your cluster passes at meaningful scale, it is
+ready for production OpenShift Virtualization workloads.
+================================================================================

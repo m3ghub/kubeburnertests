@@ -1,0 +1,466 @@
+# Kube-Burner Installation Guide
+
+**Version:** kube-burner v2.6.1  
+**Tested on:** OpenShift 4.18 and 4.21  
+**Last validated:** April 2026 — live-tested on `cluster-74ltp.dynamic.redhatworkshops.io`
+
+---
+
+## The short version
+
+> **You do not need to install anything on your laptop.**
+>
+> Every test in this project runs kube-burner as an in-cluster Kubernetes Job using
+> the official container image `quay.io/kube-burner/kube-burner:v2.6.1`.
+>
+> All you need is:
+> - Access to an OpenShift web console
+> - The `>_` web terminal inside that console
+> - Cluster-admin permissions
+
+If that describes you — skip to Quick Start (Section 2).
+
+---
+
+## Table of Contents
+
+1. Prerequisites
+2. Quick Start — verify the cluster is ready
+3. Installation Methods
+   - Method A — In-Cluster Job (recommended for all OpenShift work)
+   - Method B — Local binary (optional, macOS/Linux only)
+4. Known constraints and lessons learned
+5. Uninstall — full cleanup procedures
+6. Troubleshooting
+
+---
+
+## 1. Prerequisites
+
+### To run tests from the OpenShift web console terminal
+
+| Requirement | How to check |
+|---|---|
+| OpenShift 4.12 or newer | `oc version` in the web terminal |
+| Cluster-admin access | `oc whoami` — must return a user with admin rights |
+| `quay.io` reachable from the cluster | Run a test and watch the pod pull the image |
+| OpenShift Virtualization installed (virt tests only) | `oc get hyperconverged -A` — must return a result |
+
+### To run tests from your laptop (optional)
+
+| Requirement | How to check |
+|---|---|
+| `oc` CLI installed | `oc version` |
+| `kubectl` installed | `kubectl version --client` |
+| Logged in to the cluster | `oc whoami` |
+
+---
+
+## 2. Quick Start
+
+Open the OpenShift web console and click the `>_` terminal icon in the top-right toolbar.
+
+Run these four checks. All four must pass before running any test:
+
+```bash
+# Check 1: confirm you are logged in
+oc whoami
+
+# Check 2: confirm cluster is reachable
+oc get nodes --no-headers | awk '{print $1, $2}'
+
+# Check 3: confirm OpenShift Virtualization (required for virt tests only)
+oc get hyperconverged -A
+```
+
+| Check | Good output | Problem |
+|---|---|---|
+| `oc whoami` | Your username | `Unauthorized` — log in first |
+| `oc get nodes` | List of nodes with `Ready` | No nodes — cluster unreachable |
+| `oc get hyperconverged -A` | NAMESPACE       NAME                      AGE  /  openshift-cnv   kubevirt-hyperconverged   73m | Empty — virt tests unavailable |
+
+### Check 4 — image pull test (do this separately, it takes 1–3 minutes)
+
+Pulling a container image is never instant. Run these steps one at a time and wait for
+the status loop to show Completed before reading the logs:
+
+```bash
+# Step 1: clean up any previous run
+oc delete pod pull-test -n default 2>/dev/null || true
+```
+
+```bash
+# Step 2: create the pod (-n default goes BEFORE the -- separator)
+oc run pull-test \
+  -n default \
+  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --restart=Never \
+  --command -- kube-burner version
+```
+
+```bash
+# Step 3: run this every 15–30 seconds until STATUS shows Completed or Error
+oc get pod pull-test -n default
+```
+
+GUI alternative for Step 3: In the OpenShift web console go to Workloads -> Pods.
+Set the project filter at the top to All Projects. Click the Created column header
+to sort by newest first — pull-test will appear at the top. The Status column
+updates in real time.
+
+Expected output when complete:
+
+  NAME        READY   STATUS      RESTARTS   AGE
+  pull-test   0/1     Completed   0          7m55s
+
+```bash
+# Step 4: once Completed, read the result
+oc logs pull-test -n default | grep -i version
+# Good output: Version: v2.6.1
+```
+
+```bash
+# Step 5: if you see ImagePullBackOff or Error, get the exact reason
+oc describe pod pull-test -n default | grep -A 5 "Events:"
+```
+
+```bash
+# Step 6: clean up
+oc delete pod pull-test -n default 2>/dev/null || true
+```
+
+| Pod status | Meaning | Action |
+|---|---|---|
+| `Pending` / `ContainerCreating` | Image is downloading | Wait — first pull takes 1–3 min |
+| `Completed` | Success — tests will work | Run Step 4 to see `Version: v2.6.1` |
+| `ImagePullBackOff` | quay.io blocked or auth required | Run Step 5 to see exact error |
+| `ErrImagePull` then retries | Temporary network issue | Wait 60s and recheck |
+
+---
+
+## 3. Installation Methods
+
+### Method A — In-Cluster Job
+
+This is the only method used by every test in this project. No local binary required.
+
+#### How it works
+
+  You paste commands into the web terminal
+      |
+      v
+  oc creates a Job in the cluster
+      |
+      v
+  Job runs an initContainer that copies config files into a writable volume
+      |
+      v
+  kube-burner container starts, reads config, runs the benchmark
+      |
+      v
+  oc logs -f streams results back to your terminal in real time
+
+#### The standard Job pattern
+
+Every test in this project uses this exact structure. You never need to modify the
+Job spec — only the ConfigMap contents and the --uuid flag change between tests:
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-<test-name>
+  namespace: <your-namespace>
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=<your-uuid>]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: <your-configmap>
+        - name: workdir
+          emptyDir: {}
+```
+
+Why the initContainer? ConfigMap mounts are read-only. kube-burner writes a log
+file at startup. The initContainer copies config files into a writable emptyDir
+volume so kube-burner can start without a permission error.
+
+#### Standard RBAC setup (run once per namespace)
+
+Each test namespace needs its own ServiceAccount and RBAC. Always create the
+ServiceAccount as a separate command first — embedding it in a multi-document
+YAML apply can silently fail:
+
+```bash
+# Step 1: Create the namespace
+oc new-project <your-namespace>
+
+# Step 2: Create the ServiceAccount (always as a separate command)
+oc create serviceaccount kube-burner -n <your-namespace>
+
+# Step 3: Apply the ClusterRole and ClusterRoleBinding
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [subresources.kubevirt.io]
+    resources: [virtualmachines/start, virtualmachines/stop, virtualmachines/pause, virtualmachines/unpause]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: <your-namespace>
+EOF
+
+# Step 4: Verify everything exists before proceeding
+oc get serviceaccount kube-burner -n <your-namespace>
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner
+```
+
+All three Step 4 commands must return a result. If any says NotFound — rerun that
+specific step.
+
+---
+
+### Method B — Local Binary
+
+Only needed if you want to run kube-burner directly from your laptop without an
+in-cluster Job. This is optional — all test guides in this project work without it.
+
+#### macOS
+
+```bash
+curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+kube-burner version
+```
+
+#### Linux
+
+```bash
+curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+kube-burner version
+```
+
+#### Manual download (any platform)
+
+```bash
+VERSION=v2.6.1
+curl -LO "https://github.com/kube-burner/kube-burner/releases/download/${VERSION}/kube-burner-${VERSION}-linux-x86_64.tar.gz"
+tar -xzf kube-burner-*.tar.gz
+chmod +x kube-burner
+mv kube-burner ~/.local/bin/
+kube-burner version
+```
+
+#### Verify
+
+```bash
+kube-burner version
+# Expected: Version: v2.6.1
+
+kube-burner health-check
+# Expected: Cluster is healthy.
+```
+
+---
+
+## 4. Known Constraints and Lessons Learned
+
+These are hard-won lessons from live testing. Read these before running your first test.
+
+### Always create the ServiceAccount separately
+
+```bash
+# DO THIS:
+oc create serviceaccount kube-burner -n <namespace>
+oc apply -f - <<'EOF'
+# ... ClusterRole and ClusterRoleBinding only ...
+EOF
+
+# NOT THIS — the ServiceAccount silently fails inside a multi-doc apply:
+oc apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount   # <-- this can fail silently
+...
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+...
+EOF
+```
+
+### Always set gc: false for VM tests
+
+kube-burner's built-in garbage collection (gc: true) stops VMs before deleting them
+using a PATCH request. KubeVirt CRDs do not support this patch format and will return:
+
+  the body of the request was in an unknown format - accepted media types include:
+  application/json-patch+json, application/merge-patch+json
+
+Fix: Always use gc: false in VM test configs and add an explicit jobType: delete
+job at the end.
+
+### Always set namespacedIterations: false for VM tests
+
+Without this, kube-burner appends -0 to your namespace name (e.g. burner-kubevirt-0).
+Your watch commands and cleanup commands will target the wrong namespace.
+
+### Always start VMs with running: true
+
+Creating VMs with running: false and then patching them to running: true hits the
+same KubeVirt patch format issue. Create VMs with running: true from the start and
+let kube-burner's vmiLatency measurement capture boot time.
+
+### Namespace naming on OpenShift
+
+OpenShift reserves the kube- prefix. Use burner-, perf-, or bench- instead.
+
+### kube-burner-ocp image is private
+
+quay.io/kube-burner/kube-burner-ocp:* and quay.io/cloud-bulldozer/kube-burner-ocp:*
+require authentication and will ImagePullBackOff on most clusters. Use standard
+kube-burner with manually written configs instead — every test in this project does
+exactly that.
+
+---
+
+## 5. Uninstall — Full Cleanup
+
+### After a single test run
+
+Every test guide includes a cleanup step. The standard cleanup for any test:
+
+```bash
+# Delete the kube-burner Job
+oc delete job <job-name> -n <namespace> 2>/dev/null || true
+
+# Delete the ConfigMap
+oc delete configmap <configmap-name> -n <namespace> 2>/dev/null || true
+
+# Delete any VMs left behind (VM tests only)
+oc delete vm -l app=<label> -n <namespace> 2>/dev/null || true
+
+# Delete the project/namespace (removes all resources inside it)
+oc delete project <namespace>
+```
+
+### After all tests — full cluster cleanup
+
+Run this to remove everything kube-burner has created across the entire cluster:
+
+```bash
+# Remove all test namespaces
+for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name | grep -E "^burner-|^perf-|^bench-"); do
+  echo "Deleting namespace: $ns"
+  oc delete project $ns
+done
+
+# Remove cluster-level RBAC
+oc delete clusterrole kube-burner 2>/dev/null || true
+oc delete clusterrole kube-burner-virt 2>/dev/null || true
+oc delete clusterrolebinding kube-burner 2>/dev/null || true
+oc delete clusterrolebinding kube-burner-virt 2>/dev/null || true
+oc delete clusterrolebinding kube-burner-ocp-admin 2>/dev/null || true
+
+echo "Verification — should return nothing:"
+oc get clusterrole kube-burner 2>&1
+oc get clusterrolebinding kube-burner 2>&1
+oc get projects | grep -E "^burner-|^perf-|^bench-"
+```
+
+### Verify the cluster is clean
+
+```bash
+# No kube-burner namespaces
+oc get projects | grep -E "burner|perf|bench"
+
+# No kube-burner RBAC
+oc get clusterrole,clusterrolebinding | grep kube-burner
+
+# No kube-burner jobs running
+oc get jobs -A | grep kb-
+
+# No leftover VMs
+oc get vm -A 2>/dev/null | grep -v "^NAMESPACE"
+```
+
+All four commands should return nothing. If any return results, run the cleanup
+commands for that specific resource type.
+
+### Uninstall the local binary (Method B only)
+
+```bash
+rm -f ~/.local/bin/kube-burner
+# Verify
+which kube-burner
+# Expected: kube-burner: command not found
+```
+
+---
+
+## 6. Troubleshooting
+
+| Problem | Cause | Fix |
+|---|---|---|
+| `serviceaccount "kube-burner" not found` | SA not created, or created in wrong namespace | Run `oc create serviceaccount kube-burner -n <namespace>` |
+| `Error: ErrImagePull` on `kube-burner:v2.6.1` | `quay.io` blocked from cluster | Check pull secrets: `oc get secret pull-secret -n openshift-config` |
+| `the body of the request was in an unknown format` | `gc: true` patching VMs | Set `gc: false` and add a `jobType: delete` job |
+| Namespace shows as `burner-kubevirt-0` instead of `burner-kubevirt` | Missing `namespacedIterations: false` | Add `namespacedIterations: false` to the create job |
+| `cannot request a project starting with "kube-"` | OCP reserved prefix | Rename namespace — use `burner-`, `perf-`, or `bench-` |
+| Job shows `Running` but no pods exist | ServiceAccount missing | Check `oc describe job <name> -n <ns> | grep Events` |
+| `error: timed out waiting for the condition` on `oc logs -f` | Pod still initialising | Wait 20–30 seconds and retry |
+| VMs stuck in `Scheduling` | Not enough CPU/RAM on nodes | Reduce `replicas` count |
+| `image pull` error on CirrOS disk | Cluster cannot reach `quay.io/kubevirt/cirros-registry-disk-demo` | Check cluster pull secrets |
+| `kube-burner-ocp` image `unauthorized` | Private repository | Use standard `kube-burner` — all tests in this project support it |
+
+---
+
+All tests in this project are in docs/tests/
+Source: github.com/kube-burner/kube-burner

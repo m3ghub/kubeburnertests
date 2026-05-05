@@ -1,0 +1,320 @@
+= Pre-flight Checks — Run Once Before Any Test
+
+[sidebar]
+****
+Run these checks before starting _any_ test in this project.  
+The kube-burner check (Check 1) is the most important — if it fails, no test can run.
+****
+
+'''
+
+== Check 1 — kube-burner image is pullable ⚡ (required for ALL tests)
+
+Every test in this project runs `quay.io/kube-burner/kube-burner:v2.6.1` as an in-cluster Job. If the cluster cannot pull this image, nothing works.
+
+_Step A — clean up any leftover pod:_
+
+[source,bash]
+----
+oc delete pod kb-preflight -n default 2>/dev/null || true
+----
+
+_Step B — create the pull-test pod:_
+
+[source,bash]
+----
+oc run kb-preflight \
+  -n default \
+  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --restart=Never \
+  --command -- kube-burner version
+----
+
+_Step C — watch the status every 15 seconds until `Completed` or `Error`:_
+
+[source,bash]
+----
+oc get pod kb-preflight -n default
+----
+
+First pull takes _1–3 minutes_ — do not panic if it stays in `ContainerCreating`.
+
+_Step D — read the result:_
+
+[source,bash]
+----
+oc logs kb-preflight -n default | grep -i version
+# Expected output: Version: v2.6.1
+----
+
+_Step E — clean up:_
+
+[source,bash]
+----
+oc delete pod kb-preflight -n default 2>/dev/null || true
+----
+
+[cols="1,1,1", options="header"]
+|===
+| STATUS | Meaning | Action
+
+| `Completed` + `Version: v2.6.1` in logs | ✅ All tests can run | Proceed
+| `ImagePullBackOff` | quay.io/kube-burner is blocked | Run `oc describe pod kb-preflight -n default \ | grep -A 10 "Events:"` for exact reason
+| `Pending` / `ContainerCreating` > 5 min | Network very slow or blocked | Wait another 2 min, then check Events
+| `ErrImagePull` then retries | Temporary network issue | Wait 60 s and recheck
+|===
+
+'''
+
+== Check 2 — Cluster and login
+
+[source,bash]
+----
+oc whoami
+oc get nodes --no-headers | awk '{print $1, $2}'
+----
+
+Expected: your username, and each node showing `Ready`.
+
+'''
+
+== Check 3 — OpenShift Virtualization (VM tests only)
+
+Required for tests 09, 13–17, 20–25.
+
+[source,bash]
+----
+oc get hyperconverged -A
+----
+
+Expected: a row showing `PHASE: Deployed`. If empty — VM tests are not available.
+
+'''
+
+== Check 4 — Memory and node capacity
+
+[source,bash]
+----
+oc adm top nodes
+----
+
+Memory needed per VM type:
+[cols="1,1,1,1", options="header"]
+|===
+| OS | RAM per VM | CPUs per VM | Storage per VM
+
+| CirrOS | 512 Mi | 1 | containerDisk (no PVC)
+| RHEL 9 | 2 Gi | 1 | 30 Gi (DataVolume)
+| Windows 2022 | 4 Gi | 2 | 50 Gi (DataVolume)
+|===
+
+'''
+
+== Check 5 — OS image availability (tests 23–25 only)
+
+Tests 23–25 need real OS images (RHEL 9, Windows Server 2022). Three methods are available — use whichever works on your cluster.
+
+=== Auto-detect which method is available
+
+Run this script to find out which OS image method works for your cluster:
+
+[source,bash]
+----
+echo "=== OS Image Method Detection ==="
+echo ""
+
+# Method A: OCP Virtualization golden image (DataSource)
+echo "--- Method A: OCP Golden Image ---"
+if oc get datasource rhel9 -n openshift-virtualization-os-images 2>/dev/null | grep -q "rhel9"; then
+  echo "✅ Method A available: rhel9 DataSource found"
+  oc get datasource rhel9 -n openshift-virtualization-os-images
+elif oc get datasource rhel8 -n openshift-virtualization-os-images 2>/dev/null | grep -q "rhel8"; then
+  echo "✅ Method A available (RHEL 8): rhel8 DataSource found — substitute rhel8 in templates"
+else
+  echo "❌ Method A: no RHEL DataSource found"
+  echo "   Available golden images:"
+  oc get datasource -n openshift-virtualization-os-images 2>/dev/null | head -20
+fi
+
+echo ""
+
+# Method B: quay.io/containerdisks containerDisk (external registry)
+echo "--- Method B: quay.io/containerdisks ---"
+echo "Testing image pull (this takes up to 3 minutes)..."
+oc delete pod rhel-method-b -n default 2>/dev/null || true
+oc run rhel-method-b \
+  -n default \
+  --image=quay.io/containerdisks/rhel9:9.0 \
+  --restart=Never \
+  --command -- true 2>/dev/null
+echo "Pod created. Check status with:"
+echo "  oc get pod rhel-method-b -n default"
+echo "  (Completed = Method B works, ImagePullBackOff = blocked)"
+
+echo ""
+
+# Method C: HTTP QCOW2 import (free RHEL-compatible images)
+echo "--- Method C: HTTP QCOW2 import ---"
+if curl -s --connect-timeout 5 --max-time 10 \
+  "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/" -o /dev/null 2>/dev/null; then
+  echo "✅ Method C available: HTTP egress to AlmaLinux mirror reachable"
+else
+  echo "❌ Method C: HTTP egress blocked or slow"
+fi
+
+echo ""
+echo "Windows golden image check:"
+if oc get datavolume win2k22 -n openshift-virtualization-os-images 2>/dev/null | grep -q "win2k22"; then
+  echo "✅ Windows: win2k22 DataVolume found"
+else
+  echo "❌ Windows: win2k22 not found — Test 24 and 25 require a Windows golden image"
+fi
+----
+
+'''
+
+=== Method A — OCP golden image (recommended for OpenShift clusters)
+
+_Best for:_ Any cluster with OpenShift Virtualization — these images are pre-loaded automatically.
+
+_How to verify:_
+[source,bash]
+----
+oc get datasource -n openshift-virtualization-os-images
+----
+
+Look for `rhel9` (or `rhel8`, `rhel9` variants). If the column shows `Ready: True` or the datasource exists — you can use this method.
+
+_VM template excerpt (used in tests 23 and 25):_
+[source,yaml]
+----
+dataVolumeTemplates:
+  - metadata:
+      name: rhel-disk-{{.Iteration}}-{{.Replica}}
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: rhel9                                   # Change to rhel8 if needed
+        namespace: openshift-virtualization-os-images
+      storage:
+        resources:
+          requests:
+            storage: 30Gi
+----
+
+'''
+
+=== Method B — quay.io/containerdisks containerDisk (external registry)
+
+_Best for:_ Clusters with outbound internet access to quay.io/containerdisks. No storage needed — image is memory-mapped like CirrOS.
+
+_How to verify:_
+[source,bash]
+----
+oc delete pod rhel-method-b -n default 2>/dev/null || true
+oc run rhel-method-b \
+  -n default \
+  --image=quay.io/containerdisks/rhel9:9.0 \
+  --restart=Never \
+  --command -- true
+# Watch every 30 s:
+oc get pod rhel-method-b -n default
+# Completed = works. ImagePullBackOff = blocked.
+oc delete pod rhel-method-b -n default 2>/dev/null || true
+----
+
+_VM template excerpt (for Method B):_
+[source,yaml]
+----
+      volumes:
+        - name: rootdisk
+          containerDisk:
+            image: quay.io/containerdisks/rhel9:9.0
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: cloud-user
+              password: redhat123
+              chpasswd: {expire: false}
+----
+
+Note: with containerDisk, remove the `dataVolumeTemplates` section and use this `volumes` block instead.
+
+'''
+
+=== Method C — QCOW2 import via CDI HTTP (most universal)
+
+_Best for:_ Clusters with HTTP egress but no OCP golden images and no containerdisks access. Uses free, publicly available RHEL-compatible images.
+
+_Available free RHEL-compatible QCOW2 images:_
+
+[cols="1,1,1", options="header"]
+|===
+| Image | URL | Notes
+
+| AlmaLinux 9 | `https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2` | 1:1 RHEL binary compatible
+| Rocky Linux 9 | `https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2` | 1:1 RHEL binary compatible
+| CentOS Stream 9 | `https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2` | RHEL upstream
+| Fedora 40 | `https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-40-1.14.qcow2` | Modern RHEL-family
+|===
+
+_How to verify HTTP egress is available:_
+[source,bash]
+----
+curl -s --connect-timeout 10 \
+  "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/" \
+  -o /dev/null -w "%{http_code}\n"
+# 200 = reachable. Anything else = blocked.
+----
+
+_VM template excerpt (for Method C — AlmaLinux 9 example):_
+[source,yaml]
+----
+dataVolumeTemplates:
+  - metadata:
+      name: rhel-disk-{{.Iteration}}-{{.Replica}}
+    spec:
+      source:
+        http:
+          url: "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
+      storage:
+        resources:
+          requests:
+            storage: 10Gi
+----
+
+_Important:_ QCOW2 imports via HTTP are large (600 MB – 2 GB) and slow. Budget _10–30 minutes_ for the DataVolume import before VMs can boot. Check import progress with:
+
+[source,bash]
+----
+oc get datavolume -n burner-rhel-fleet
+# Watch for PHASE: Succeeded
+----
+
+'''
+
+== Check 6 — Storage class (tests using DataVolumes: 23–25)
+
+[source,bash]
+----
+oc get storageclass
+----
+
+Look for the default storage class (marked with `(default)`). If the VM template shows a storage error, set `storageClassName` explicitly in the `DataVolumeTemplate` spec to match your cluster's default.
+
+'''
+
+== Quick reference — which checks apply to which tests
+
+[cols="1,1,1,1,1,1,1", options="header"]
+|===
+| Tests | Check 1 (kb pull) | Check 2 (login) | Check 3 (OCP Virt) | Check 4 (memory) | Check 5 (OS image) | Check 6 (storage)
+
+| 01–08 | ✅ Required | ✅ Required | — | — | — | —
+| 09–17 | ✅ Required | ✅ Required | ✅ Required | ✅ Required | — | —
+| 18–22 | ✅ Required | ✅ Required | ✅ Required (20, 22) | ✅ Required | — | —
+| 23 (RHEL) | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required
+| 24 (Windows) | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required
+| 25 (Mixed) | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required | ✅ Required
+|===

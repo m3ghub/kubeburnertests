@@ -1,0 +1,16 @@
+# Alert profile for check-alerts subcommand test
+- expr: avg(irate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|CONNECT"}[2m])) > 1
+  description: "API server latency exceeded 1s"
+  severity: error
+
+- expr: etcd_mvcc_db_total_size_in_bytes > 7516192768
+  description: "etcd DB exceeds 7 GiB"
+  severity: error
+
+- expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+  description: "Node not Ready"
+  severity: critical
+
+- expr: irate(process_cpu_seconds_total{job="apiserver"}[2m]) > 0
+  description: "API server is consuming CPU (informational)"
+  severity: info

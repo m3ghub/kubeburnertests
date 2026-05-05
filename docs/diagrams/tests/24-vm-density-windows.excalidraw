@@ -1,0 +1,108 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 50,
+      "y": 20,
+      "width": 700,
+      "height": 30,
+      "text": "Test 24: Windows Server VM Fleet Density — VMware Migration Demo",
+      "fontSize": 22,
+      "fontFamily": 2,
+      "textAlign": "center",
+      "strokeColor": "#0078D4",
+      "fillStyle": "solid"
+    },
+    {
+      "id": "sub",
+      "type": "text",
+      "x": 50,
+      "y": 58,
+      "width": 700,
+      "height": 20,
+      "text": "Creates N Windows Server 2022 VMs  |  Image: win2k22 from OCP golden images  |  2 CPUs, 4 Gi RAM",
+      "fontSize": 13,
+      "fontFamily": 2,
+      "textAlign": "center",
+      "strokeColor": "#444444"
+    },
+    {
+      "id": "b1",
+      "type": "rectangle",
+      "x": 40,
+      "y": 100,
+      "width": 190,
+      "height": 70,
+      "strokeColor": "#0078D4",
+      "fillStyle": "solid",
+      "backgroundColor": "#deecf9",
+      "label": {"text": "kube-burner Job\ncreates N Windows\nVMs (running: true)", "fontSize": 13}
+    },
+    {
+      "id": "b2",
+      "type": "rectangle",
+      "x": 265,
+      "y": 100,
+      "width": 190,
+      "height": 70,
+      "strokeColor": "#0078D4",
+      "fillStyle": "solid",
+      "backgroundColor": "#deecf9",
+      "label": {"text": "CDI clones win2k22\nDataVolume per VM\n(30–120 s)", "fontSize": 13}
+    },
+    {
+      "id": "b3",
+      "type": "rectangle",
+      "x": 490,
+      "y": 100,
+      "width": 190,
+      "height": 70,
+      "strokeColor": "#0078D4",
+      "fillStyle": "solid",
+      "backgroundColor": "#deecf9",
+      "label": {"text": "QEMU starts\nWindows kernel loads\nServices start", "fontSize": 13}
+    },
+    {
+      "id": "b4",
+      "type": "rectangle",
+      "x": 715,
+      "y": 100,
+      "width": 150,
+      "height": 70,
+      "strokeColor": "#107C10",
+      "fillStyle": "solid",
+      "backgroundColor": "#dff0d8",
+      "label": {"text": "VMI Running\nP50/P95/P99\nrecorded", "fontSize": 13}
+    },
+    {
+      "id": "measure",
+      "type": "rectangle",
+      "x": 40,
+      "y": 220,
+      "width": 825,
+      "height": 60,
+      "strokeColor": "#e37400",
+      "fillStyle": "solid",
+      "backgroundColor": "#fef3e2",
+      "label": {"text": "📊 Measures: vmiLatency P50/P95/P99  |  Windows typical P99: 3–8 minutes  |  2 CPUs + 4 Gi RAM per VM", "fontSize": 13}
+    },
+    {
+      "id": "note",
+      "type": "text",
+      "x": 40,
+      "y": 300,
+      "width": 825,
+      "height": 40,
+      "text": "🪟 Windows boots slowly — 3-8 min is NORMAL. Show customers this is the same speed as VMware. OpenShift adds no overhead.",
+      "fontSize": 12,
+      "fontFamily": 2,
+      "strokeColor": "#555555"
+    }
+  ],
+  "appState": {"viewBackgroundColor": "#ffffff", "currentItemFontFamily": 2},
+  "files": {}
+}

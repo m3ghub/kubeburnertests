@@ -1,0 +1,589 @@
+# Test 09: KubeVirt Density — Virtual Computers Inside Kubernetes
+
+> **Difficulty:** ⭐⭐⭐ Advanced  
+> **Time to run:** ~20 minutes  
+> **What it does:** Creates, starts, stops, and deletes Virtual Machines (VMs) using OpenShift Virtualization to measure VM lifecycle performance  
+> **Requires:** OpenShift Virtualization (KubeVirt) installed on the cluster  
+> **No local install needed:** kube-burner runs inside the cluster as a Job — nothing to install on your laptop
+
+> **⚡ Pre-flight required:** Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see **[00-preflight.md](00-preflight.md)**.
+
+---
+
+## What is this test? 🖥️💻
+
+You know how a video game console can run multiple games at once?  
+Kubernetes can do something even cooler — it can run **real virtual computers** (VMs) inside the cluster using a technology called **KubeVirt** (or OpenShift Virtualization on OpenShift).
+
+The **KubeVirt Density** test creates several VMs and then measures:
+- How fast they start (boot up)
+- How fast they stop (shut down)
+- How stable the cluster stays while managing them all at once
+
+This is the **baseline virtualisation test** — if your cluster passes this, you are ready to move on to the more demanding virt tests (live migration, churn, density scaling).
+
+---
+
+## What does it measure?
+
+| Metric | What it means |
+|---|---|
+| **VM Create time** | How fast the API server accepted the VM object |
+| **VM Start time** | How fast the VM booted and became Running |
+| **VM Stop time** | How fast the VM shut down cleanly |
+| **VM Delete time** | How fast all VM resources were removed |
+
+---
+
+## How it works
+
+```
+VM Lifecycle — what you will see on screen:
+
+  CREATE        →    START         →    (PAUSE)      →    DELETE
+  ──────────         ──────────         ──────────         ──────────
+  VM object          VM boots           VMs stay           All objects
+  appears in         status changes     Running for        removed from
+  the console        Stopped →          N seconds          the namespace
+  (Stopped)          Running            (configurable)     ✅ Done
+```
+
+Each VM runs **CirrOS** by default — a tiny test operating system that boots in seconds and uses almost no RAM (~128Mi). This keeps the test fast and resource-light. You can swap the image for RHEL 9, Windows, or any other OS — see Step 6.
+
+---
+
+## Before you start — open these browser tabs
+
+You will run commands in the **OpenShift web terminal** and watch results in the **console GUI** at the same time. Open these tabs before you begin:
+
+| Tab | Where to go | What you will watch |
+|---|---|---|
+| **Tab 1** | Your cluster console (already open) | Web terminal for running commands |
+| **Tab 2** | Virtualization → VirtualMachines | VMs appearing and changing state live |
+| **Tab 3** | Observe → Dashboards → Kubernetes / Compute Resources | CPU and memory impact on nodes |
+| **Tab 4** | Compute → Nodes | Node resource pressure during the test |
+
+---
+
+## Pre-flight checklist
+
+- [ ] You are logged into the OpenShift web console
+- [ ] OpenShift Virtualization is installed (you will verify this in Step 1)
+- [ ] You have cluster-admin permissions
+- [ ] At least 2 worker nodes are available
+- [ ] ~20 minutes free
+
+---
+
+## Step-by-step guide
+
+---
+
+### Step 1 — Open the web terminal
+
+In your OpenShift console, look for the **`>_` icon** in the top-right navigation bar (next to the bell icon).
+
+Click it. A terminal panel opens at the bottom of the screen.  
+This terminal is **already logged in** as you — no separate `oc login` needed.
+
+Confirm it is working:
+
+```bash
+oc whoami
+```
+
+You should see your username. If you see an error, refresh the page and try again.
+
+---
+
+### Step 2 — Verify OpenShift Virtualization is installed
+
+```bash
+oc get hyperconverged -A
+```
+
+**Good output** — you will see something like:
+
+```
+NAMESPACE       NAME                      AGE
+openshift-cnv   kubevirt-hyperconverged   73m
+```
+
+**If you see nothing:** OpenShift Virtualization is not installed. Stop here and ask your cluster admin to install it before continuing.
+
+---
+
+### Step 3 — Create the project (namespace)
+
+```bash
+oc new-project burner-kubevirt
+```
+
+Expected output:
+
+```
+Now using project "burner-kubevirt" on server "https://api.cluster-..."
+```
+
+---
+
+### Step 4 — Create the Service Account
+
+```bash
+oc create serviceaccount kube-burner -n burner-kubevirt
+```
+
+Expected output:
+
+```
+serviceaccount/kube-burner created
+```
+
+---
+
+### Step 5 — Apply permissions (RBAC)
+
+This gives the kube-burner service account permission to create and manage VMs:
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [subresources.kubevirt.io]
+    resources: [virtualmachines/start, virtualmachines/stop]
+    verbs: [update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-kubevirt
+EOF
+```
+
+Expected output:
+
+```
+clusterrole.rbac.authorization.k8s.io/kube-burner created
+clusterrolebinding.rbac.authorization.k8s.io/kube-burner created
+```
+
+---
+
+### Step 6 — Create the config files
+
+Two files are needed — a **VM template** (File 1) and a **main config** (File 2).
+
+**Option A — Download from the repo (recommended):**
+
+```bash
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnerexplained/main/docs/tests/files/09-kubevirt-density"
+
+curl --fail -sL "${BASE}/vm-template.yml"      -o /tmp/vm-template.yml && \
+curl --fail -sL "${BASE}/kubevirt-config.yml"  -o /tmp/kubevirt-config.yml && \
+echo "Download OK" || echo "DOWNLOAD FAILED — use manual paste below"
+```
+
+Verify (first line of each file must not be `404` or `<!DOCTYPE`):
+
+```bash
+head -1 /tmp/vm-template.yml /tmp/kubevirt-config.yml
+```
+
+**Option B — Paste manually** (air-gapped or private cluster):
+
+---
+
+**File 1 — VM template**
+
+This defines what each VM looks like. The default uses **CirrOS** — a tiny test OS that boots in seconds.
+
+> **Note:** `spec.running: true` is deprecated in KubeVirt v1.x. The correct field is `spec.runStrategy: Always`. Both work identically — using `running: true` produces a harmless warning in the kube-burner logs but does not affect test results. The template below uses `runStrategy: Always`.
+
+```bash
+cat > /tmp/vm-template.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: burner-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner-vm
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app: kube-burner-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+EOF
+```
+
+> **Want a different operating system?**  
+> Change the `image:` line in the template above to any supported container disk:
+>
+> | OS | Image | Boot time | Memory per VM |
+> |---|---|---|---|
+> | CirrOS (default) | `quay.io/kubevirt/cirros-registry-disk-demo:latest` | 15–30 s | 128Mi |
+> | RHEL 9 | `quay.io/containerdisks/rhel9:9.0` | 60–120 s | 2Gi |
+> | Fedora | `quay.io/containerdisks/fedora:latest` | 30–60 s | 1Gi |
+>
+> For Windows Server 2022, use the OCP golden image — see [Test 24](24-vm-density-windows.md) for setup instructions.
+
+---
+
+**File 2 — Main config**
+
+This controls how many VMs are created, how long they stay running, and when they are deleted.
+
+```bash
+cat > /tmp/kubevirt-config.yml << 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # PHASE 1: CREATE — 3 CirrOS VMs, 128Mi each
+  # Baseline density test: all VMs boot, reach Running, hold 30s
+  # Boot time P99 target: < 60s on a healthy cluster
+  # ============================================================
+  - name: kubevirt-density
+    namespace: burner-kubevirt
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 5
+    burst: 5
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 3
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    jobPause: 30s
+
+  # ============================================================
+  # PHASE 2: DELETE — remove all VMs by label
+  # Matches label app=kube-burner-vm set by vm-template.yml
+  # Cluster should return to idle within 30s of this completing
+  # ============================================================
+  - name: kubevirt-delete
+    namespace: burner-kubevirt
+    jobType: delete
+    qps: 5
+    burst: 5
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          app: kube-burner-vm
+EOF
+```
+
+> **Why `gc: false`?** kube-burner's built-in garbage collection stops VMs via a patch before deleting them. KubeVirt CRDs do not accept that patch format. We use an explicit `jobType: delete` job instead, which calls the Kubernetes DELETE API directly — no patch needed.
+>
+> **Why `namespacedIterations: false`?** Without this, kube-burner appends `-0` to your namespace name (e.g. `burner-kubevirt-0`). Setting this to false keeps the namespace exactly as you named it.
+
+---
+
+#### Customisation options
+
+**Change the number of VMs**
+
+Edit `replicas: 3` in the config above. Each VM uses ~128Mi RAM (CirrOS) so scale accordingly:
+
+| replicas | Total RAM needed | Good for |
+|---|---|---|
+| 3 (default) | ~384Mi | First run, quick demo |
+| 5 | ~640Mi | Moderate demo |
+| 10 | ~1.3Gi | Meaningful density test |
+| 20+ | ~2.6Gi+ | Stress test — check node capacity first |
+
+**Keep VMs running longer before deleting them**
+
+The `jobPause: 30s` line tells kube-burner to wait 30 seconds after all VMs reach `Running` state before starting the delete job. Change this to any duration:
+
+```yaml
+jobPause: 30s    # 30 seconds (default)
+jobPause: 60s    # 1 minute
+jobPause: 5m     # 5 minutes
+jobPause: 0s     # delete immediately
+```
+
+This is useful for:
+- **Customer demos** — keep VMs running long enough to show the console and metrics
+- **Monitoring** — let Prometheus collect metrics while VMs are stable
+- **Manual inspection** — SSH into a VM or check logs before the test cleans up
+
+---
+
+> **⚠️ To change any setting after the first run:**  
+> You must delete both the ConfigMap and the Job before re-applying, otherwise the old config is reused.
+>
+> ```bash
+> oc delete configmap kubevirt-config -n burner-kubevirt
+> oc delete job kb-kubevirt -n burner-kubevirt 2>/dev/null || true
+> ```
+>
+> Then re-run from **Step 6** (recreate the files), **Step 7** (recreate the ConfigMap), and **Step 9** (re-launch the Job).
+
+---
+
+### Step 6b — Verify both files exist
+
+```bash
+ls -lh /tmp/kubevirt-config.yml \
+        /tmp/vm-template.yml
+```
+
+Both files must show non-zero sizes before continuing. If either is missing, re-run Step 6.
+
+---
+
+### Step 7 — Package the config files into a ConfigMap
+
+```bash
+oc create configmap kubevirt-config \
+  --from-file=config.yml=/tmp/kubevirt-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-kubevirt
+```
+
+Expected output:
+
+```
+configmap/kubevirt-config created
+```
+
+---
+
+### Step 8 — Switch to Tab 2 in your browser
+
+Before you launch the test, go to **Virtualization → VirtualMachines** in the console and set the namespace filter to `burner-kubevirt`.
+
+You will watch VMs appear here in real time once the Job starts.
+
+---
+
+### Step 9 — Launch the test
+
+Paste this into the web terminal and press Enter:
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-kubevirt
+  namespace: burner-kubevirt
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=kubevirt-001]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: kubevirt-config
+        - name: workdir
+          emptyDir: {}
+EOF
+```
+
+Expected output:
+
+```
+job.batch/kb-kubevirt created
+```
+
+---
+
+### Step 10 — Watch the VMs appear (GUI)
+
+Switch to **Tab 2 — Virtualization → VirtualMachines**.
+
+You will see the VMs appear and their STATUS column change in real time:
+
+| Status | What it means |
+|---|---|
+| `Stopped` | VM object created, not yet running |
+| `Starting` | VM is booting up |
+| `Running` | VM is live ✅ |
+| `Stopping` | VM is shutting down |
+| `Stopped` | VM shut down cleanly |
+
+**This is the moment to show a customer** — point to the screen and say:  
+*"Watch — three virtual machines are booting on your cluster right now, completely automated."*
+
+---
+
+### Step 11 — Watch the VMs appear (terminal)
+
+If you prefer to watch in the terminal, open a second terminal tab in the console and run:
+
+```bash
+watch "oc get vm -n burner-kubevirt"
+```
+
+---
+
+### Step 12 — Stream the live results
+
+Back in the web terminal, run:
+
+```bash
+oc logs -f job/kb-kubevirt -n burner-kubevirt
+```
+
+You will see kube-burner report each phase as it completes. Actual output from a live run:
+
+```
+time="..." level=info msg="🔥 Starting kube-burner (v2.6.1) with UUID kubevirt-001"
+time="..." level=info msg="Pre-load: Creating DaemonSet using images [quay.io/kubevirt/cirros-registry-disk-demo:latest]"
+time="..." level=info msg="Pre-load: All images pulled on 3 nodes"
+time="..." level=info msg="Triggering job: kubevirt-density"
+Warning: spec.running is deprecated, please use spec.runStrategy instead.  ← harmless
+time="..." level=info msg="Actions in namespace burner-kubevirt completed"
+time="..." level=info msg="Pausing for 30s before finishing job"
+time="..." level=info msg="Job kubevirt-density took 20s"
+time="..." level=info msg="kubevirt-density: VMIRunning 99th: 17000 ms max: 20000 ms avg: 16000 ms"
+time="..." level=info msg="kubevirt-density: VMReady 99th: 17383 ms max: 20136 ms avg: 16460 ms"
+time="..." level=info msg="Triggering job: kubevirt-delete"
+time="..." level=info msg="Found 3 virtualmachines with selector app=kube-burner-vm; patching them"
+time="..." level=info msg="Job kubevirt-delete took 28s"
+time="..." level=info msg="Finished execution with UUID: kubevirt-001"
+time="..." level=info msg="👋 Exiting kube-burner kubevirt-001"
+```
+
+> **Pre-load note:** kube-burner v2.6.1 automatically creates a temporary DaemonSet to pre-pull the container image to all nodes before starting the test. This adds ~15 seconds but ensures consistent boot times across nodes. It is removed automatically.
+
+**Typical CirrOS VM boot time (VMIRunning P99): 15–20 seconds** on a healthy cluster.  
+If your VMs take longer than 60 seconds, check node resources (Tab 3 and 4).
+
+---
+
+### Step 13 — Check node impact (optional demo step)
+
+Switch to **Tab 3 — Observe → Dashboards**.
+
+In the dashboard dropdown, select:
+
+```
+KubeVirt / Infrastructure Resources / Top Consumers
+```
+
+From there switch between metric types using the dropdown at the top of the dashboard:
+
+| Metric | What to show the customer |
+|---|---|
+| **CPU** | Spike when VMs started — virt-launcher processes consuming cores |
+| **Memory** | Steady climb as each VM loads into RAM |
+| **Network** | Traffic burst from the CirrOS boot process |
+| **Storage** | I/O from the container disk being pulled and mounted |
+
+**What to say:** *"Each line on this graph is a VM consuming real compute resources on your cluster. This is the same view your operations team would use to monitor a production virtualisation workload."*
+
+---
+
+### Step 14 — Clean up
+
+Once the Job completes, remove everything:
+
+```bash
+oc delete job kb-kubevirt -n burner-kubevirt
+oc delete configmap kubevirt-config -n burner-kubevirt
+oc delete project burner-kubevirt
+```
+
+Expected output:
+
+```
+job.batch "kb-kubevirt" deleted
+configmap "kubevirt-config" deleted
+project.project.openshift.io "burner-kubevirt" deleted
+```
+
+---
+
+## Troubleshooting
+
+| Problem | What to check | Fix |
+|---|---|---|
+| `no kind VirtualMachine` | KubeVirt not installed | Run `oc get hyperconverged -A` — if empty, stop and install OpenShift Virtualization |
+| VMs stuck in `Scheduling` | Not enough CPU/RAM on nodes | Reduce `replicas: 3` to `replicas: 1` in the config file, delete the ConfigMap and Job, then re-run from Step 6 |
+| `image pull` error on CirrOS | Cluster cannot reach `quay.io` | Check your cluster's pull secret: `oc get secret pull-secret -n openshift-config` |
+| VMs start but never reach `Running` | VMI not scheduling correctly | Run `oc describe vmi -n burner-kubevirt` and look at the Events section |
+| Job pod stays in `Pending` | RBAC or ServiceAccount issue | Confirm Step 4 and Step 5 completed without errors |
+| `configmap not found` error | ConfigMap creation failed | Re-run Step 7 and confirm output says `configmap/kubevirt-config created` |
+| Config change has no effect | Old ConfigMap still in place | Run `oc delete configmap kubevirt-config -n burner-kubevirt` then re-run Step 7 and Step 9 |
+
+---
+
+## What good results look like
+
+| Metric | Good | Investigate |
+|---|---|---|
+| VM boot time (CirrOS) VMIRunning P99 | 15–20 seconds | > 60 seconds |
+| All VMs reach Running | Yes, within 5 min | Any VM stuck in Starting > 5 min |
+| Job exits cleanly | `Finished execution` in logs | Any `error` or `failed` in logs |
+| Node CPU during test | Spike then returns to baseline | CPU stays pinned after test ends |
+
+---
+
+*Next test in the virtualisation series: [Test 16 — VM Pause/Unpause Storm](16-vm-pause-unpause.md)*

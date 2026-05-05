@@ -1,0 +1,632 @@
+# Test 25: Mixed VM Fleet Density — 70% Windows / 30% RHEL
+
+> **Difficulty:** ⭐⭐⭐⭐⭐ Expert  
+> **Time to run:** 40–90 minutes  
+> **What it does:** Creates a mixed fleet of Windows Server and RHEL 9 VMs simultaneously — the most realistic enterprise environment simulation available  
+> **Requires:** OpenShift Virtualization 4.x, multi-node cluster, Windows golden image + RHEL image available  
+> **VM Images:** `win2k22` DataVolume (Windows) + `quay.io/containerdisks/rhel9:9.0` (RHEL)
+
+---
+
+## What is this test? 🔀
+
+Most enterprises run a mix of Windows and Linux. Not 100% of one or the other — a mix. SQL Server on Windows, NGINX on RHEL, Active Directory on Windows, Jenkins on RHEL. The **70/30 split** is a common real-world ratio in organizations migrating from VMware.
+
+This test creates that mixed fleet on OpenShift Virtualization:
+
+- **70% Windows Server 2022** (the legacy Microsoft workloads being migrated)
+- **30% RHEL 9** (the enterprise Linux workloads running alongside)
+
+**Why this is the most powerful customer demo:**  
+*"You told us you have a mix of Windows and Linux. This is exactly that. We're running your fleet — both operating systems, booting simultaneously, on the same cluster. This is what Day 1 of your VMware migration looks like."*
+
+---
+
+## How the split works
+
+For a total of 10 VMs:
+
+- **7 Windows** VMs (70%) — each needs 4 Gi RAM, 2 CPUs, 50 Gi storage
+- **3 RHEL** VMs (30%) — each needs 2 Gi RAM, 1 CPU, containerDisk
+
+kube-burner runs two sequential create jobs — one for Windows, one for RHEL — then waits for ALL of them to reach Running before recording the final latency.
+
+```
+Job 1: create-windows-vms (70% of total)
+  └─► 7 Windows VMs boot (3–8 minutes)
+
+Job 2: create-rhel-vms (30% of total)
+  └─► 3 RHEL VMs boot simultaneously with Windows (60–120 seconds)
+
+Both sets run concurrently on the cluster
+kube-burner waits for ALL to reach Running
+Final vmiLatency reflects the slowest OS (Windows)
+```
+
+---
+
+## What it measures
+
+
+| Metric                         | Description                                        | What to watch               |
+| ------------------------------ | -------------------------------------------------- | --------------------------- |
+| VMI ready latency (full fleet) | Time until ALL VMs (Windows + RHEL) are Running    | Gated by Windows boot time  |
+| RHEL P99                       | How fast enterprise Linux starts alongside Windows | Should be 60–120 s          |
+| Windows P99                    | How fast Windows boots under mixed load            | 3–8 min typical             |
+| virt-handler memory            | RSS under mixed OS load                            | Higher than single-OS tests |
+| Scheduler balance              | Whether Windows and RHEL are spread across nodes   | Check node placement        |
+
+
+---
+
+## Before you start — open these browser tabs
+
+
+| Tab       | Where                                                                      | What you watch                                        |
+| --------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Tab 1** | Console (already open)                                                     | Web terminal                                          |
+| **Tab 2** | Virtualization → VirtualMachines                                           | Mixed fleet appearing — Windows and RHEL side by side |
+| **Tab 3** | Observe → Metrics                                                          | `kubevirt_vmi_phase_count{phase="Running"}`           |
+| **Tab 4** | Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers | Memory distribution across nodes                      |
+
+
+---
+
+## Pre-flight checklist
+
+Run all checks before starting. Every check must pass.
+
+### Check 1 — kube-burner image is pullable
+
+```bash
+kubectl delete pod kb-preflight -n default 2>/dev/null || true
+kubectl run kb-preflight \
+  -n default \
+  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --restart=Never \
+  --command -- kube-burner version
+```
+
+Run every 15 seconds until `Completed`:
+
+```bash
+kubectl get pod kb-preflight -n default
+kubectl logs kb-preflight -n default | grep -i version   # Expected: Version: v2.6.1
+kubectl delete pod kb-preflight -n default 2>/dev/null || true
+```
+
+### Check 2 — both OS golden images are available
+
+```bash
+# RHEL golden image
+oc get datasource rhel9 -n openshift-virtualization-os-images
+
+# Windows golden image
+oc get datavolume win2k22 -n openshift-virtualization-os-images
+
+# OpenShift Virtualization installed
+oc get hyperconverged -A
+```
+
+All three must return a result. If RHEL shows `not found`, run:
+
+```bash
+oc get datasource -n openshift-virtualization-os-images
+```
+
+Substitute the available RHEL version (e.g. `rhel8`) in the template below.
+
+### Check 3 — memory available
+
+```bash
+oc adm top nodes
+```
+
+Memory needed: (Windows count × 4 Gi) + (RHEL count × 2 Gi) = total required
+
+---
+
+## Step-by-step guide
+
+---
+
+### Step 1 — Open the web terminal
+
+```bash
+oc whoami
+oc get hyperconverged -A
+oc get datavolume win2k22 -n openshift-virtualization-os-images
+```
+
+---
+
+### Step 2 — Choose your fleet size
+
+The ratio is always 70% Windows / 30% RHEL. Pick a total that fits your cluster RAM.
+
+
+| Total VMs | Windows (70%) | RHEL (30%) | RAM needed (approx) |
+| --------- | ------------- | ---------- | ------------------- |
+| 5         | 3 W + 2 R     | —          | 16 Gi               |
+| 10        | 7 W + 3 R     | —          | 34 Gi               |
+| 20        | 14 W + 6 R    | —          | 68 Gi               |
+| 30        | 21 W + 9 R    | —          | 102 Gi              |
+
+
+```bash
+# Set your total — script calculates the split automatically
+TOTAL_VMS=10
+WINDOWS_COUNT=$(( TOTAL_VMS * 7 / 10 ))
+RHEL_COUNT=$(( TOTAL_VMS - WINDOWS_COUNT ))
+echo "Windows: ${WINDOWS_COUNT}  RHEL: ${RHEL_COUNT}  Total: ${TOTAL_VMS}"
+UUID="mixed-fleet-$(date +%s)"
+```
+
+---
+
+### Step 3 — Create the project and RBAC
+
+```bash
+oc new-project burner-mixed-fleet
+kubectl create serviceaccount kube-burner -n burner-mixed-fleet
+```
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts, persistentvolumeclaims]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-mixed-fleet
+EOF
+```
+
+```bash
+kubectl get serviceaccount kube-burner -n burner-mixed-fleet
+kubectl get clusterrole kube-burner
+kubectl get clusterrolebinding kube-burner
+```
+
+---
+
+### Step 4 — Switch to Tab 2
+
+Go to **Virtualization → VirtualMachines**. During the test you will see two types of VMs appear:
+
+- `win-vm-`* — Windows Server 2022 (slow to boot, provisioning phase visible)
+- `rhel-vm-*` — RHEL 9 (faster, will reach Running while Windows is still booting)
+
+This side-by-side behavior is exactly what real mixed fleet management looks like.
+
+---
+
+### Step 5 — Write the config file
+
+```bash
+cat > /tmp/mixed-fleet-config.yml << EOF
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Windows VMs (70% of fleet)
+  - name: create-windows-vms
+    namespace: burner-mixed-fleet
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: /config/windows-vm-template.yml
+        replicas: ${WINDOWS_COUNT}
+
+  # RHEL VMs (30% of fleet)
+  - name: create-rhel-vms
+    namespace: burner-mixed-fleet
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: /config/rhel-vm-template.yml
+        replicas: ${RHEL_COUNT}
+
+  # Final cleanup
+  - name: delete-all-vms
+    namespace: burner-mixed-fleet
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector: {app: mixed-fleet}
+EOF
+```
+
+---
+
+### Step 6 — Write the VM templates
+
+Windows template:
+
+```bash
+cat > /tmp/windows-vm-template.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: mixed-fleet
+    os: windows2022
+    kube-burner-job: create-windows-vms
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: win-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+          storageClassName: ""
+        source:
+          pvc:
+            namespace: openshift-virtualization-os-images
+            name: win2k22
+  template:
+    metadata:
+      labels:
+        app: mixed-fleet
+        os: windows2022
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            spinlocks:
+              spinlocks: 8191
+            vapic: {}
+        clock:
+          utc: {}
+          timer:
+            hpet:
+              present: false
+            pit:
+              tickPolicy: delay
+            rtc:
+              tickPolicy: catchup
+            hyperv: {}
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: win-disk-{{.Iteration}}-{{.Replica}}
+EOF
+```
+
+RHEL template (uses OCP golden image — no external registry pull needed):
+
+```bash
+cat > /tmp/rhel-vm-template.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: mixed-fleet
+    os: rhel9
+    kube-burner-job: create-rhel-vms
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: mixed-fleet
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+EOF
+```
+
+> **Note:** If your cluster has `rhel8` but not `rhel9`, change `name: rhel9` to `name: rhel8` in the `sourceRef` block above.
+
+---
+
+### Step 7 — Create the ConfigMap
+
+```bash
+kubectl create configmap mixed-fleet-config \
+  --from-file=config.yml=/tmp/mixed-fleet-config.yml \
+  --from-file=windows-vm-template.yml=/tmp/windows-vm-template.yml \
+  --from-file=rhel-vm-template.yml=/tmp/rhel-vm-template.yml \
+  -n burner-mixed-fleet
+
+kubectl get configmap mixed-fleet-config -n burner-mixed-fleet
+```
+
+---
+
+### Step 8 — Launch the Job
+
+```bash
+cat << JOBYAML | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-mixed-fleet
+  namespace: burner-mixed-fleet
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: mixed-fleet-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML
+```
+
+---
+
+### Step 9 — Watch the mixed fleet boot
+
+```bash
+kubectl get pod -n burner-mixed-fleet -w
+```
+
+Wait for `Running`, then:
+
+```bash
+kubectl logs -f job/kb-mixed-fleet -n burner-mixed-fleet
+```
+
+---
+
+### Step 10 — The customer demo narrative
+
+The mixed fleet tells the best migration story. Use this script:
+
+**When RHEL VMs reach Running first:**
+
+> *"See how the RHEL VMs are already running? They boot in about 90 seconds. Those are your Linux workloads — already live. The Windows VMs are still coming up — that's completely normal, Windows takes 3–5 minutes to boot, same as on any hypervisor. OpenShift isn't adding any overhead."*
+
+**When Windows VMs start reaching Running:**
+
+> *"There's your first Windows VM. And the second. They're not running on VMware. They're not running on bare metal. They're running inside Kubernetes, managed the same way as your containers, using the same cluster, the same RBAC, the same monitoring stack. This is your entire fleet on one platform."*
+
+**After all VMs are running:**
+
+> *"Every VM in this fleet is now running — both Windows and RHEL. Your migration from VMware would look exactly like this, but at the scale of your entire datacenter."*
+
+---
+
+### Step 11 — Show the OS label filter
+
+In **Virtualization → VirtualMachines**, show the customer that the VMs are labeled:
+
+```bash
+# Show all Windows VMs
+kubectl get vm -n burner-mixed-fleet -l os=windows2022
+
+# Show all RHEL VMs  
+kubectl get vm -n burner-mixed-fleet -l os=rhel9
+
+# Show the full fleet
+kubectl get vm -n burner-mixed-fleet -l app=mixed-fleet
+```
+
+This demonstrates the label-based management that makes mixed fleets manageable at scale.
+
+---
+
+### Step 12 — Read the results
+
+```
+INFO vmiLatency:
+INFO   P50:  198s
+INFO   P95:  295s
+INFO   P99:  360s   ← gated by Windows boot time
+INFO Finished execution. UUID: mixed-fleet-...
+```
+
+
+| Metric                | Good               | Investigate                                  |
+| --------------------- | ------------------ | -------------------------------------------- |
+| All VMs reach Running | Yes                | Any stuck in Provisioning > 15 min           |
+| RHEL VMs P99          | < 180 s            | RHEL slower than expected — check image pull |
+| Windows VMs P99       | < 10 min           | Windows hanging — check CDI and storage      |
+| Node balance          | Mixed across nodes | All VMs on one node — scheduler issue        |
+
+
+---
+
+### Step 13 — Change the split (optional)
+
+To run different ratios, change the counts:
+
+```bash
+# 50/50 split
+TOTAL_VMS=10
+WINDOWS_COUNT=5
+RHEL_COUNT=5
+
+# 80/20 (heavy Windows)
+TOTAL_VMS=10
+WINDOWS_COUNT=8
+RHEL_COUNT=2
+
+# 100% RHEL (compare to Test 23)
+TOTAL_VMS=10
+WINDOWS_COUNT=0
+RHEL_COUNT=10
+```
+
+Then recreate the ConfigMap and rerun Steps 5–11.
+
+---
+
+### Step 14 — Clean up
+
+```bash
+kubectl delete job kb-mixed-fleet -n burner-mixed-fleet 2>/dev/null || true
+kubectl delete configmap mixed-fleet-config -n burner-mixed-fleet 2>/dev/null || true
+kubectl delete vm -A -l app=mixed-fleet 2>/dev/null || true
+# Wait for Windows DataVolumes to delete
+sleep 60
+oc delete project burner-mixed-fleet
+kubectl delete clusterrole kube-burner 2>/dev/null || true
+kubectl delete clusterrolebinding kube-burner 2>/dev/null || true
+```
+
+Verify:
+
+```bash
+oc get projects | grep burner-mixed-fleet
+kubectl get vm -A -l app=mixed-fleet 2>/dev/null
+# Both should return nothing
+```
+
+---
+
+## Expected results
+
+
+| Total VMs | Windows | RHEL | Expected P99 | Notes                 |
+| --------- | ------- | ---- | ------------ | --------------------- |
+| 5         | 3       | 2    | 4–6 min      | Good starting point   |
+| 10        | 7       | 3    | 5–8 min      | Realistic small fleet |
+| 20        | 14      | 6    | 6–10 min     | Production scale demo |
+
+
+Results are always gated by Windows boot time. RHEL VMs will reach Running much earlier.
+
+---
+
+## Troubleshooting
+
+
+| Problem                                  | Fix                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| `win2k22 DataVolume not found`           | Complete Test 24 Pre-flight to import the Windows image             |
+| RHEL `ImagePullBackOff`                  | `quay.io/containerdisks/rhel9:9.0` unreachable — check pull secrets |
+| Windows VMs stuck in `Provisioning`      | CDI is cloning — check `oc get datavolume -n burner-mixed-fleet`    |
+| `serviceaccount "kube-burner" not found` | Re-run Step 3 separately                                            |
+| Storage class error                      | Set `storageClassName` in Windows template to match your cluster    |
+| Only RHEL VMs appear                     | Windows count calculated as 0 — recheck TOTAL_VMS value             |
+
+

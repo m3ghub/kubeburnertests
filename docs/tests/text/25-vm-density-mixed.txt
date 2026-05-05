@@ -1,0 +1,167 @@
+================================================================================
+TEST 25: Mixed VM Fleet Density — 70% Windows / 30% RHEL
+================================================================================
+Difficulty:  Expert (5 stars)
+Time:        40-90 minutes
+What it does: Creates a mixed fleet of Windows Server 2022 (70%) and RHEL 9
+             (30%) VMs simultaneously — the most realistic enterprise simulation
+VM Images:   win2k22 DataVolume + quay.io/containerdisks/rhel9:9.0
+Requires:    OpenShift Virtualization, Windows golden image + RHEL image
+================================================================================
+
+WHAT IS THIS TEST?
+------------------
+Most enterprises run a mix of Windows and Linux. This test creates that mixed
+fleet: 70% Windows Server 2022 + 30% RHEL 9, booting simultaneously.
+
+"You told us you have a mix of Windows and Linux. This is exactly that.
+ Both operating systems, booting at the same time, on the same cluster.
+ This is what Day 1 of your VMware migration looks like."
+
+FLEET SIZE CALCULATOR
+----------------------
+Total VMs | Windows (70%) | RHEL (30%) | RAM needed
+----------|---------------|------------|------------
+5         | 3             | 2          | ~16 Gi
+10        | 7             | 3          | ~34 Gi
+20        | 14            | 6          | ~68 Gi
+30        | 21            | 9          | ~102 Gi
+
+PRE-FLIGHT CHECKS
+-----------------
+  oc get datavolume win2k22 -n openshift-virtualization-os-images
+  oc get hyperconverged -A
+  oc adm top nodes
+
+STEP 1 — SET PARAMETERS
+-------------------------
+  TOTAL_VMS=10
+  WINDOWS_COUNT=$(( TOTAL_VMS * 7 / 10 ))
+  RHEL_COUNT=$(( TOTAL_VMS - WINDOWS_COUNT ))
+  echo "Windows: ${WINDOWS_COUNT}  RHEL: ${RHEL_COUNT}"
+  UUID="mixed-fleet-$(date +%s)"
+
+STEP 2 — CREATE PROJECT AND RBAC
+----------------------------------
+  oc new-project burner-mixed-fleet
+  oc create serviceaccount kube-burner -n burner-mixed-fleet
+
+  (Apply ClusterRole and ClusterRoleBinding — see markdown guide for full RBAC.
+   Must include cdi.kubevirt.io for DataVolumes.)
+
+STEP 3 — WRITE CONFIG FILE
+----------------------------
+  cat > /tmp/mixed-fleet-config.yml << EOF
+  global:
+    gc: false
+    measurements:
+      - name: vmiLatency
+  jobs:
+    - name: create-windows-vms
+      namespace: burner-mixed-fleet
+      jobType: create
+      jobIterations: 1
+      namespacedIterations: false
+      podWait: false
+      waitWhenFinished: false
+      maxWaitTimeout: 60m
+      objects:
+        - objectTemplate: /config/windows-vm-template.yml
+          replicas: ${WINDOWS_COUNT}
+    - name: create-rhel-vms
+      namespace: burner-mixed-fleet
+      jobType: create
+      jobIterations: 1
+      namespacedIterations: false
+      podWait: false
+      waitWhenFinished: true
+      maxWaitTimeout: 60m
+      objects:
+        - objectTemplate: /config/rhel-vm-template.yml
+          replicas: ${RHEL_COUNT}
+    - name: delete-all-vms
+      namespace: burner-mixed-fleet
+      jobType: delete
+      waitForDeletion: true
+      objects:
+        - apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          labelSelector: {app: mixed-fleet}
+  EOF
+
+STEP 4 — WRITE VM TEMPLATES
+-----------------------------
+  Write to /tmp/windows-vm-template.yml:
+    (Windows Server 2022 template with DataVolumeTemplate, 2 CPUs, 4 Gi RAM)
+    See full YAML in docs/tests/markdown/25-vm-density-mixed.md Step 6
+
+  Write to /tmp/rhel-vm-template.yml:
+    (RHEL 9 containerDisk template, 1 CPU, 2 Gi RAM)
+    See full YAML in docs/tests/markdown/25-vm-density-mixed.md Step 6
+
+STEP 5 — CREATE CONFIGMAP
+---------------------------
+  oc create configmap mixed-fleet-config \
+    --from-file=config.yml=/tmp/mixed-fleet-config.yml \
+    --from-file=windows-vm-template.yml=/tmp/windows-vm-template.yml \
+    --from-file=rhel-vm-template.yml=/tmp/rhel-vm-template.yml \
+    -n burner-mixed-fleet
+
+STEP 6 — LAUNCH JOB AND WATCH
+-------------------------------
+  (Apply Job YAML — see markdown guide for full job spec)
+
+  oc get pod -n burner-mixed-fleet -w
+  oc logs -f job/kb-mixed-fleet -n burner-mixed-fleet
+
+DEMO NARRATIVE — WHAT TO SAY
+------------------------------
+When RHEL VMs boot first:
+  "See how the RHEL VMs are already running? 90 seconds.
+   Those are your Linux workloads. The Windows VMs are still booting —
+   normal. OpenShift isn't adding overhead."
+
+When Windows VMs reach Running:
+  "There's your first Windows VM. Not on VMware. Not on bare metal.
+   On Kubernetes. Same platform, same RBAC, same monitoring."
+
+After all VMs running:
+  "Every VM in this fleet is running. Your migration from VMware would
+   look exactly like this, at the scale of your entire datacenter."
+
+OPTIONAL — CHANGE THE SPLIT
+-----------------------------
+  50/50:     WINDOWS_COUNT=5   RHEL_COUNT=5
+  80/20:     WINDOWS_COUNT=8   RHEL_COUNT=2
+  All RHEL:  WINDOWS_COUNT=0   RHEL_COUNT=10
+
+EXPECTED RESULTS
+-----------------
+  INFO vmiLatency:
+  INFO   P50:  198s
+  INFO   P95:  295s
+  INFO   P99:  360s   <- gated by Windows boot time
+
+STEP 7 — CLEAN UP
+-----------------
+  oc delete job kb-mixed-fleet -n burner-mixed-fleet 2>/dev/null || true
+  oc delete vm -A -l app=mixed-fleet 2>/dev/null || true
+  sleep 60
+  oc delete project burner-mixed-fleet
+  oc delete clusterrole kube-burner 2>/dev/null || true
+  oc delete clusterrolebinding kube-burner 2>/dev/null || true
+
+TROUBLESHOOTING
+---------------
+  win2k22 DataVolume not found
+    -> Complete Test 24 Pre-flight to import the Windows image
+
+  RHEL ImagePullBackOff
+    -> quay.io/containerdisks/rhel9:9.0 unreachable — check pull secrets
+
+  Windows stuck in Provisioning
+    -> CDI still cloning: oc get datavolume -n burner-mixed-fleet
+
+  Only RHEL VMs appear
+    -> Windows count is 0 — recheck TOTAL_VMS value (must be >= 2)
+================================================================================

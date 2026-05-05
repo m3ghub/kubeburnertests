@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: node-density
+    kube-burner-job: "{{.JobName}}"
+    iteration: "{{.Iteration}}"
+spec:
+  replicas: {{.podReplicas}}
+  selector:
+    matchLabels:
+      app: node-density
+      name: app-{{.Iteration}}-{{.Replica}}
+  template:
+    metadata:
+      labels:
+        app: node-density
+        name: app-{{.Iteration}}-{{.Replica}}
+    spec:
+      containers:
+        - name: app
+          image: "{{.image}}"
+          resources:
+            requests:
+              cpu: "{{.cpuRequest}}"
+              memory: "{{.memRequest}}"
+      terminationGracePeriodSeconds: 0

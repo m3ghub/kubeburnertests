@@ -1,0 +1,45 @@
+# Alert Profile
+# Defines Prometheus-based alerts that cause kube-burner to exit with code 3
+# when an error/critical severity alert fires.
+#
+# Use with:
+#   kube-burner check-alerts -a examples/metrics/alerts.yml --start <epoch> --end <epoch>
+# Or embed in a benchmark config that points to this file.
+#
+# Severity levels: info, warning, error, critical
+# Alerts at "error" or "critical" will cause kube-burner to return exit code 3.
+
+# API server request latency is too high
+- expr: avg(irate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|CONNECT"}[2m])) > 1
+  description: "API server average request latency exceeded 1 second"
+  severity: error
+
+# etcd leader changes are occurring
+- expr: increase(etcd_server_leader_changes_seen_total[10m]) > 0
+  description: "etcd leader election occurred in the last 10 minutes — may indicate instability"
+  severity: warning
+
+# etcd DB size nearing default quota (8Gi)
+- expr: etcd_mvcc_db_total_size_in_bytes > 7516192768
+  description: "etcd database size exceeds 7 GiB — approaching the default quota limit"
+  severity: error
+
+# High scheduler queue depth
+- expr: scheduler_pending_pods{queue="active"} > 100
+  description: "More than 100 pods are pending in the active scheduler queue"
+  severity: warning
+
+# Node not ready
+- expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+  description: "One or more cluster nodes are not in Ready state"
+  severity: critical
+
+# High node CPU usage
+- expr: avg(irate(node_cpu_seconds_total{mode!="idle"}[2m])) by (instance) > 0.95
+  description: "Node CPU utilization exceeds 95% — may cause scheduling delays"
+  severity: warning
+
+# High node memory pressure
+- expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.05
+  description: "Node available memory is below 5% of total — memory pressure risk"
+  severity: error

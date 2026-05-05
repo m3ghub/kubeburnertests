@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: all-tests
+    kube-burner-job: "{{.JobName}}"
+    iteration: "{{.Iteration}}"
+spec:
+  replicas: {{.podReplicas}}
+  selector:
+    matchLabels:
+      app: all-tests
+      name: app-{{.Iteration}}-{{.Replica}}
+  template:
+    metadata:
+      labels:
+        app: all-tests
+        name: app-{{.Iteration}}-{{.Replica}}
+    spec:
+      containers:
+        - name: app
+          image: "{{.image}}"
+          resources:
+            requests:
+              cpu: "{{.cpuRequest}}"
+              memory: "{{.memRequest}}"
+      terminationGracePeriodSeconds: 0

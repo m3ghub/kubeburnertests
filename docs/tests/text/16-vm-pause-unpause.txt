@@ -1,0 +1,203 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                           16-VM-PAUSE-UNPAUSE
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift Virtualization
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+       TEST 16: VM PAUSE/UNPAUSE STORM — FREEZING AND THAWING VMs AT SCALE
+================================================================================
+
+  NOTE: Difficulty: Advanced (3/4 stars)
+  NOTE: Time to run: ~15 minutes
+  NOTE: What it does: Creates running VMs then rapidly pauses and unpauses them
+  NOTE: Requires: OpenShift Virtualization (KubeVirt) installed
+
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST?
+--------------------------------------------------------------------------------
+
+Imagine hitting the pause button on 50 games simultaneously, then pressing
+play on all of them at once -- while measuring how long each takes.
+
+Pausing a VM does NOT shut it down. KubeVirt sends a signal to QEMU to:
+  - Save CPU state (registers, instruction pointer, in-flight operations)
+  - Freeze all I/O (writes queued but not executed)
+  - Deflate the memory balloon (minimise RAM footprint)
+
+Unpausing reverses all of this instantly -- the VM resumes exactly where
+it left off, as if no time passed.
+
+--------------------------------------------------------------------------------
+  HOW PAUSE/UNPAUSE WORKS
+--------------------------------------------------------------------------------
+
+  RUNNING VM                    PAUSED VM
+  --------------------          -------------------------
+  CPU executing code            CPU state saved (frozen)
+  Memory in use: 512Mi          Memory balloon: minimised
+  I/O active                    I/O queued (frozen)
+  QEMU: running                 QEMU: paused (SIGSTOP)
+  VMI status: Running           VMI status: Paused
+                                ^ instant transition ^
+
+--------------------------------------------------------------------------------
+  WHAT DOES IT MEASURE?
+--------------------------------------------------------------------------------
+
+  Metric                         What it means
+  ---------------------------    -----------------------------------------------
+  Pause latency                  Time from pause command to VMI status = Paused
+  Unpause latency                Time from unpause command to VMI status = Running
+  virt-handler response time     How fast per-node agents process commands
+  Concurrent pause throughput    How many VMs can be paused per second
+  State consistency              Whether all VMs resume correctly
+
+================================================================================
+  STEP-BY-STEP GUIDE
+================================================================================
+
+------------------------------------------------------------------------
+  STEP 1 -- Create namespace and RBAC
+------------------------------------------------------------------------
+
+  oc new-project burner-pause
+
+  IMPORTANT: The ClusterRole must include pause and unpause in subresources:
+
+    - apiGroups: [subresources.kubevirt.io]
+      resources:
+        - virtualmachines/start
+        - virtualmachines/stop
+        - virtualmachines/pause
+        - virtualmachines/unpause
+        - virtualmachines/restart
+      verbs: [update]
+
+------------------------------------------------------------------------
+  STEP 2 -- Create config (vm-pause-config.yml)
+------------------------------------------------------------------------
+
+  global:
+    gc: true
+    measurements: []
+
+  jobs:
+    - name: create-vms
+      jobType: create
+      namespace: burner-pause
+      namespacedIterations: false
+      jobIterations: 1
+      qps: 5
+      burst: 5
+      waitWhenFinished: false
+      objects:
+        - objectTemplate: vm-pause-template.yml
+          replicas: 8
+          wait: false
+          inputVars: {memory: 128Mi}
+
+    - name: start-vms
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 60s
+      objects:
+        - kubeVirtOp: start
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: pause-vms              # Pause all at once
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 15s
+      objects:
+        - kubeVirtOp: pause
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: unpause-vms            # Unpause all at once
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 30s
+      objects:
+        - kubeVirtOp: unpause
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: pause-vms-cycle2       # Second cycle
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 10s
+      objects:
+        - kubeVirtOp: pause
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: unpause-vms-cycle2
+      jobType: kubevirt
+      executionMode: parallel
+      jobPause: 20s
+      objects:
+        - kubeVirtOp: unpause
+          labelSelector: {kube-burner.io/job: create-vms}
+
+    - name: stop-vms
+      jobType: kubevirt
+      executionMode: parallel
+      objects:
+        - kubeVirtOp: stop
+          labelSelector: {kube-burner.io/job: create-vms}
+          inputVars: {force: false}
+
+------------------------------------------------------------------------
+  STEP 3 -- Watch the VMs freeze and thaw
+------------------------------------------------------------------------
+
+  watch "oc get vmi -n burner-pause -o wide"
+
+  Expected progression:
+    STATUS: Running  (before pause phase)
+    STATUS: Paused   (during pause phase -- 15 second hold)
+    STATUS: Running  (after unpause phase)
+    STATUS: Paused   (cycle 2 pause)
+    STATUS: Running  (cycle 2 unpause)
+
+------------------------------------------------------------------------
+  STEP 4 -- Push harder
+------------------------------------------------------------------------
+
+  Increase to 20 VMs:
+    replicas: 20
+
+  Signs the virt-handler is saturated:
+    - Pause operations taking >30 seconds per VM
+    - VMIs stuck in "Pausing" state
+    - virt-handler pod CPU at 100%
+
+------------------------------------------------------------------------
+  STEP 5 -- Clean up
+------------------------------------------------------------------------
+
+  oc delete job kb-vm-pause -n burner-pause 2>/dev/null || true
+  oc delete project burner-pause
+  oc delete clusterrole kube-burner-virt
+  oc delete clusterrolebinding kube-burner-virt
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+  Problem                          Fix
+  -------------------------------- -----------------------------------------------
+  VMs stuck in Pausing             Reduce replicas or use sequential execution mode
+  forbidden: virtualmachines/pause Add pause/unpause to ClusterRole subresources
+  Unpause fails after long pause   If paused >10 min, restart VM instead of unpause
+  Second cycle slower than first   Normal -- QEMU CPU cache reload after unpause
+
+================================================================================
+  END OF TEST 16
+================================================================================
+  Next test: 17-vm-hotplug-storage -- attach and detach disks to running VMs
+================================================================================

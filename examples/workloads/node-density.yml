@@ -1,0 +1,40 @@
+# Node Density Workload
+# Simulates a high-density workload with Deployments and Services.
+# Useful for testing the control plane under typical production-style load.
+#
+# Usage:
+#   kube-burner init -c examples/workloads/node-density.yml
+
+global:
+  gc: true
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 120s
+
+jobs:
+  - name: node-density
+    jobType: create
+    jobIterations: 20
+    qps: 20
+    burst: 20
+    namespace: node-density
+    namespacedIterations: true
+    iterationsPerNamespace: 10
+    cleanup: true
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    preLoadImages: true
+    preLoadPeriod: 10m
+    objects:
+      - objectTemplate: deployment-template.yml
+        replicas: 1
+        inputVars:
+          podReplicas: 5
+
+      - objectTemplate: service-template.yml
+        replicas: 1

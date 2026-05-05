@@ -1,0 +1,68 @@
+global:
+  gc: true
+  measurements: []
+
+jobs:
+  - name: create-vms
+    jobType: create
+    namespace: burner-pause
+    namespacedIterations: false
+    jobIterations: 1
+    qps: 5
+    burst: 5
+    waitWhenFinished: false
+    objects:
+      - objectTemplate: vm-pause-template.yml
+        replicas: 8
+        wait: false
+        inputVars:
+          memory: 128Mi
+
+  - name: start-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: pause-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 15s
+    objects:
+      - kubeVirtOp: pause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: unpause-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 30s
+    objects:
+      - kubeVirtOp: unpause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: pause-vms-cycle2
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 10s
+    objects:
+      - kubeVirtOp: pause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: unpause-vms-cycle2
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 20s
+    objects:
+      - kubeVirtOp: unpause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: stop-vms
+    jobType: kubevirt
+    executionMode: parallel
+    objects:
+      - kubeVirtOp: stop
+        labelSelector: {kube-burner.io/job: create-vms}
+        inputVars:
+          force: false

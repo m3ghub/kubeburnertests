@@ -1,0 +1,8 @@
+{
+  "metadata": {
+    "labels": {
+      "patched-by": "kube-burner",
+      "patch-job": "patch-deployments"
+    }
+  }
+}

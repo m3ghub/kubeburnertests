@@ -1,0 +1,32 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: churn-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: burner-churn
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: burner-churn
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: "{{.memory}}"
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest

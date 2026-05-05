@@ -1,0 +1,47 @@
+global:
+  gc: true
+  measurements: []
+
+jobs:
+  # Phase 1: Create VMs (stopped)
+  - name: create-vms
+    jobType: create
+    namespace: burner-migration
+    jobIterations: 1
+    qps: 5
+    burst: 5
+    waitWhenFinished: false
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 4
+        wait: false
+        inputVars:
+          memory: 128Mi
+
+  # Phase 2: Start all VMs — wait for Running, then pause to allow full boot
+  - name: start-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  # Phase 3: Live-migrate all running VMs to different nodes
+  - name: migrate-vms
+    jobType: kubevirt
+    executionMode: sequential
+    jobPause: 30s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  # Phase 4: Stop all VMs after migration
+  - name: stop-vms
+    jobType: kubevirt
+    executionMode: parallel
+    objects:
+      - kubeVirtOp: stop
+        labelSelector: {kube-burner.io/job: create-vms}
+        inputVars:
+          force: false

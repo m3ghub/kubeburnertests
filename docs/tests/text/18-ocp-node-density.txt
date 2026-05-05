@@ -1,0 +1,143 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                           18-OCP-NODE-DENSITY
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift / Kubernetes
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+     TEST 18: OCP NODE DENSITY — PODS PER NODE AT PRODUCTION SCALE
+================================================================================
+
+  NOTE: Difficulty: ⭐⭐⭐ Intermediate
+  NOTE: Time to run: ~10 minutes
+  NOTE: What it does: Schedules pods per worker node using the exact same
+        benchmark Red Hat runs before shipping every OpenShift release
+  NOTE: Requires: Multi-node OpenShift cluster
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST? 🏢
+--------------------------------------------------------------------------------
+
+Imagine a skyscraper where every floor is a worker node. You want to know:
+how many offices (pods) can each floor hold before the elevators (the scheduler)
+start getting overwhelmed?
+
+The generic pod-density test (Test 02) gives you a rough answer. OCP Node
+Density gives you the answer that actually matters for OpenShift -- because it
+packs pods the way OpenShift itself does, using the same resource reservations,
+network policies, and metrics profiles that Red Hat uses internally to validate
+every OCP release.
+
+When you show this to a customer, you can say: "This is the exact same
+benchmark Red Hat runs before they ship an OpenShift version. Your cluster
+passed it."
+
+--------------------------------------------------------------------------------
+  WHAT IT MEASURES
+--------------------------------------------------------------------------------
+
+  Metric                      Description
+  -------                     -----------
+  Pod creation latency (P99)  Time from API call to pod scheduled
+  Pod ready latency (P99)     Time from scheduled to container Ready
+  API server request rate     Requests/second during peak creation
+  etcd write throughput       Writes/second during creation burst
+  Scheduler throughput        Pods scheduled per second
+
+--------------------------------------------------------------------------------
+  BEFORE YOU START -- OPEN THESE BROWSER TABS
+--------------------------------------------------------------------------------
+
+  Tab 1: Console (web terminal)
+  Tab 2: Workloads -> Pods (watch pods appearing)
+  Tab 3: Observe -> Metrics  (sum(kube_pod_status_phase{phase="Running"}))
+  Tab 4: Compute -> Nodes (CPU/Memory climbing)
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP GUIDE
+--------------------------------------------------------------------------------
+
+STEP 1 -- OPEN THE WEB TERMINAL
+  Click the >_ icon in the top-right of the console toolbar.
+    oc whoami
+    oc get nodes --no-headers | awk '{print $1, $2}'
+  All nodes must show Ready.
+
+STEP 2 -- CHOOSE PODS PER NODE
+  Workers    Starter          Medium            Heavy
+  2-3 nodes  50 pods/node     100 pods/node     200 pods/node
+  4-6 nodes  100 pods/node    200 pods/node     245 pods/node
+
+STEP 3 -- CREATE THE PROJECT AND RBAC
+    oc new-project burner-node-density
+    oc create serviceaccount kube-burner -n burner-node-density
+  Apply ClusterRole and ClusterRoleBinding (see markdown guide for full YAML).
+    oc get serviceaccount kube-burner -n burner-node-density
+    oc get clusterrole kube-burner
+    oc get clusterrolebinding kube-burner
+  All three must return a result.
+
+STEP 4 -- WRITE CONFIG FILES
+    PODS_PER_NODE=50
+    UUID="node-density-$(date +%s)"
+  Write /tmp/node-density-config.yml and /tmp/pod-template.yml
+  (see full markdown guide for content).
+
+STEP 5 -- CREATE THE CONFIGMAP
+    oc create configmap node-density-config \
+      --from-file=config.yml=/tmp/node-density-config.yml \
+      --from-file=pod-template.yml=/tmp/pod-template.yml \
+      -n burner-node-density
+    oc get configmap node-density-config -n burner-node-density
+
+STEP 6 -- LAUNCH THE JOB
+  Apply the Job YAML (see full markdown guide).
+
+STEP 7 -- STREAM LOGS
+    oc get pod -n burner-node-density -w
+  Wait for Running, then:
+    oc logs -f job/kb-node-density -n burner-node-density
+
+STEP 8 -- READ RESULTS
+    INFO podLatency:
+    INFO   P50:  2.3s
+    INFO   P95:  5.1s
+    INFO   P99:  8.4s    <- > 15s may indicate bottleneck
+    INFO Finished execution.
+
+STEP 9 -- CLEAN UP
+    oc delete job kb-node-density -n burner-node-density 2>/dev/null || true
+    oc delete configmap node-density-config -n burner-node-density 2>/dev/null || true
+    oc delete project burner-node-density
+    oc delete clusterrole kube-burner 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner 2>/dev/null || true
+
+  Verify clean:
+    oc get projects | grep burner-node-density
+  Should return nothing.
+
+--------------------------------------------------------------------------------
+  EXPECTED RESULTS
+--------------------------------------------------------------------------------
+
+  Cluster type              Expected P99     Max API rate
+  3-node SNO-adjacent       5-15 s           ~200 req/s
+  Standard 3-worker OCP     2-8 s            ~400 req/s
+  Large OCP (10+ workers)   2-6 s            ~800 req/s
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM                              FIX
+  serviceaccount not found             Re-run Step 3 (create SA separately)
+  Pods stuck in Pending: Too many pods Reduce PODS_PER_NODE
+  ImagePullBackOff on kube-burner      quay.io unreachable -- check pull secrets
+  P99 > 30s                            Reduce PODS_PER_NODE -- ceiling found
+
+================================================================================

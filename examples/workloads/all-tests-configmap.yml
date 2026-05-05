@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: all-tests
+    kube-burner-job: "{{.JobName}}"
+    iteration: "{{.Iteration}}"
+data:
+  benchmark-uuid: "{{.UUID}}"
+  iteration: "{{.Iteration}}"
+  replica: "{{.Replica}}"
+  job-name: "{{.JobName}}"

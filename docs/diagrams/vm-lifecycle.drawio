@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-04-27" version="24.0.0">
+  <diagram name="VM Lifecycle — KubeVirt State Machine" id="vm-lifecycle">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="KubeVirt VM Lifecycle — Full State Machine" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="327" y="30" width="1000" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Subtitle -->
+        <mxCell id="subtitle" value="All states a VirtualMachine can be in, and the kube-burner operations that drive transitions" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontColor=#5f6368;" vertex="1" parent="1">
+          <mxGeometry x="327" y="72" width="1000" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Not Exists -->
+        <mxCell id="s0" value="&lt;b&gt;Not Exists&lt;/b&gt;&lt;br&gt;(No VM object)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="250" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Stopped -->
+        <mxCell id="s1" value="&lt;b&gt;Stopped&lt;/b&gt;&lt;br&gt;VM object exists&lt;br&gt;No VMI running" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="240" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Starting -->
+        <mxCell id="s2" value="&lt;b&gt;Starting&lt;/b&gt;&lt;br&gt;VMI created&lt;br&gt;virt-launcher pod scheduling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="140" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Running -->
+        <mxCell id="s3" value="&lt;b&gt;Running&lt;/b&gt;&lt;br&gt;VMI active&lt;br&gt;OS executing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="900" y="240" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Paused -->
+        <mxCell id="s4" value="&lt;b&gt;Paused&lt;/b&gt;&lt;br&gt;VMI active&lt;br&gt;QEMU frozen (SIGSTOP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="900" y="420" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Migrating -->
+        <mxCell id="s5" value="&lt;b&gt;Migrating&lt;/b&gt;&lt;br&gt;Memory copying&lt;br&gt;to destination node" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="420" width="160" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: Stopping -->
+        <mxCell id="s6" value="&lt;b&gt;Stopping&lt;/b&gt;&lt;br&gt;ACPI shutdown&lt;br&gt;VMI terminating" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="310" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- STATE: CrashLoopBackOff -->
+        <mxCell id="s7" value="&lt;b&gt;Error / CrashLoop&lt;/b&gt;&lt;br&gt;Boot failed&lt;br&gt;virt-launcher OOMKilled" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="30" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: create -->
+        <mxCell id="e1" value="&lt;b&gt;create&lt;/b&gt;&lt;br&gt;(jobType: create)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1a73e8;fontColor=#1a73e8;fontSize=10;fontStyle=1;" edge="1" source="s0" target="s1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: start -->
+        <mxCell id="e2" value="&lt;b&gt;start&lt;/b&gt;&lt;br&gt;(kubevirt: start)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#188038;fontColor=#188038;fontSize=10;fontStyle=1;" edge="1" source="s1" target="s2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: boot completes -->
+        <mxCell id="e3" value="boot completes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#188038;fontColor=#188038;fontSize=10;" edge="1" source="s2" target="s3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: boot fails -->
+        <mxCell id="e4" value="boot fails" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;fontColor=#b85450;fontSize=10;" edge="1" source="s2" target="s7" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: pause -->
+        <mxCell id="e5" value="&lt;b&gt;pause&lt;/b&gt;&lt;br&gt;(kubevirt: pause)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=10;fontStyle=1;" edge="1" source="s3" target="s4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: unpause -->
+        <mxCell id="e6" value="&lt;b&gt;unpause&lt;/b&gt;&lt;br&gt;(kubevirt: unpause)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;fontColor=#9673a6;fontSize=10;fontStyle=1;" edge="1" source="s4" target="s3" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1120" y="460" />
+              <mxPoint x="1120" y="285" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRANSITION: migrate -->
+        <mxCell id="e7" value="&lt;b&gt;migrate&lt;/b&gt;&lt;br&gt;(kubevirt: migrate)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;fontColor=#d6b656;fontSize=10;fontStyle=1;" edge="1" source="s3" target="s5" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="980" y="330" />
+              <mxPoint x="980" y="460" />
+              <mxPoint x="800" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRANSITION: migration completes -->
+        <mxCell id="e8" value="migration&lt;br&gt;completes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;fontColor=#d6b656;fontSize=10;" edge="1" source="s5" target="s3" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="720" y="420" />
+              <mxPoint x="720" y="330" />
+              <mxPoint x="980" y="330" />
+              <mxPoint x="980" y="285" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRANSITION: stop (from Running) -->
+        <mxCell id="e9" value="&lt;b&gt;stop&lt;/b&gt;&lt;br&gt;(kubevirt: stop)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;fontColor=#b85450;fontSize=10;fontStyle=1;" edge="1" source="s3" target="s6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: stop completes -->
+        <mxCell id="e10" value="shutdown&lt;br&gt;completes" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#b85450;fontColor=#b85450;fontSize=10;" edge="1" source="s6" target="s1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TRANSITION: delete -->
+        <mxCell id="e11" value="&lt;b&gt;delete&lt;/b&gt;&lt;br&gt;(jobType: delete)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#666666;fontColor=#666666;fontSize=10;fontStyle=1;" edge="1" source="s1" target="s0" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="460" y="370" />
+              <mxPoint x="180" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRANSITION: restart -->
+        <mxCell id="e12" value="&lt;b&gt;restart&lt;/b&gt;&lt;br&gt;(kubevirt: restart)" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d6b656;fontColor=#d6b656;fontSize=10;fontStyle=1;curved=1;" edge="1" source="s3" target="s2" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="980" y="240" />
+              <mxPoint x="980" y="185" />
+              <mxPoint x="800" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend box -->
+        <mxCell id="leg0" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="100" y="560" width="380" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="&lt;b&gt;Legend — kube-burner operations&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="116" y="572" width="360" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="create / delete  →  jobType: create | jobType: delete" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="602" width="360" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="start / stop / restart  →  jobType: kubevirt" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="624" width="360" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="pause / unpause  →  jobType: kubevirt  (Test 16)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="646" width="360" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="migrate  →  jobType: kubevirt  (Test 13)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="668" width="360" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="add-volume / remove-volume  →  jobType: kubevirt  (Test 17)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="690" width="360" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" value="churnConfig on create job  →  cyclic delete+recreate  (Test 15)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="116" y="712" width="360" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Test badges -->
+        <mxCell id="t09" value="Test 09" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="580" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t09l" value="create → start → stop → delete (baseline)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="580" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t13" value="Test 13" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="614" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t13l" value="start → migrate → stop (live migration)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="614" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t14" value="Test 14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="648" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t14l" value="create → start (escalating replicas until ceiling)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="648" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t15" value="Test 15" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="682" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t15l" value="churnConfig: cyclic delete+recreate (endurance)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="682" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t16" value="Test 16" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="716" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t16l" value="start → pause → unpause → stop (state freeze)" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="716" width="320" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t17" value="Test 17" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="750" width="70" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="t17l" value="start → add-volume → remove-volume → stop" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="640" y="750" width="320" height="28" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

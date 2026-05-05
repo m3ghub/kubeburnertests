@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Test 16: VM Pause/Unpause Storm — Freezing and Thawing VMs at Scale</title>
+  <style>
+  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
+  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
+  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
+  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
+  p{margin:8px 0}a{color:#1a73e8}
+  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
+  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
+  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
+  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
+  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
+  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
+  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
+  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
+  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
+  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
+  </style>
+</head>
+<body>
+<h1>Test 16: VM Pause/Unpause Storm — Freezing and Thawing VMs at Scale</h1>
+<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐ Advanced</div>
+<div class="note"><strong>Time to run:</strong> ~15 minutes</div>
+<div class="note"><strong>What it does:</strong> Creates running VMs, then rapidly pauses and unpauses all of them — testing QEMU state snapshots, memory balloon driver, and virt-handler response time</div>
+<div class="warn"><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed</div>
+<br><hr><br>
+
+<h2>What is this test? ❄️▶️🖥️</h2>
+<p>Imagine hitting the pause button on 50 games simultaneously, then pressing play on all of them at once — while measuring how long each one takes to freeze and resume.</p>
+<p><strong>Pausing</strong> a VM does not shut it down. Instead, KubeVirt sends a signal to the QEMU process to:</p>
+<ul>
+  <li>Save CPU state (registers, instruction pointer, in-flight operations)</li>
+  <li>Freeze all I/O (writes queued but not executed)</li>
+  <li>Deflate the memory balloon (minimise RAM footprint)</li>
+</ul>
+<p><strong>Unpausing</strong> reverses all of this instantly — the VM resumes exactly where it left off.</p>
+<br><hr><br>
+
+<h2>How pause/unpause works</h2>
+<pre>RUNNING VM                    PAUSED VM
+──────────────                ─────────────────────────
+CPU executing code            CPU state saved (frozen)
+Memory in use: 512Mi          Memory balloon: minimised
+I/O active                    I/O queued (frozen)
+QEMU: running                 QEMU: paused (SIGSTOP)
+VMI status: Running           VMI status: Paused
+                              ↕  (instant transition)</pre>
+<br><hr><br>
+
+<h2>What does it measure?</h2>
+<table>
+<thead><tr><th>Metric</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Pause latency</td><td>Time from pause command to VMI status = Paused</td></tr>
+<tr><td>Unpause latency</td><td>Time from unpause command to VMI status = Running</td></tr>
+<tr><td>virt-handler response time</td><td>How fast per-node agents process commands</td></tr>
+<tr><td>Concurrent pause throughput</td><td>How many VMs can be paused per second</td></tr>
+<tr><td>State consistency</td><td>Whether all VMs resume correctly after unpause</td></tr>
+</tbody>
+</table>
+<br><hr><br>
+
+<h2>Step-by-step guide</h2>
+
+<div class="step-hdr">Step 1 — Create namespace and RBAC</div>
+<pre>oc new-project burner-pause</pre>
+<p>Apply RBAC — the ClusterRole must include <code>virtualmachines/pause</code> and <code>virtualmachines/unpause</code> in the subresources list:</p>
+<pre>  - apiGroups: [subresources.kubevirt.io]
+    resources:
+      - virtualmachines/start
+      - virtualmachines/stop
+      - virtualmachines/pause
+      - virtualmachines/unpause
+      - virtualmachines/restart
+    verbs: [update]</pre>
+
+<div class="step-hdr">Step 2 — Create config (vm-pause-config.yml)</div>
+<pre>global:
+  gc: true
+  measurements: []
+
+jobs:
+  - name: create-vms
+    jobType: create
+    namespace: burner-pause
+    namespacedIterations: false
+    jobIterations: 1
+    qps: 5
+    burst: 5
+    waitWhenFinished: false
+    objects:
+      - objectTemplate: vm-pause-template.yml
+        replicas: 8
+        wait: false
+        inputVars:
+          memory: 128Mi
+
+  - name: start-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: pause-vms
+    jobType: kubevirt
+    executionMode: parallel      # Pause all at once
+    jobPause: 15s
+    objects:
+      - kubeVirtOp: pause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: unpause-vms
+    jobType: kubevirt
+    executionMode: parallel      # Unpause all at once
+    jobPause: 30s
+    objects:
+      - kubeVirtOp: unpause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: pause-vms-cycle2
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 10s
+    objects:
+      - kubeVirtOp: pause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: unpause-vms-cycle2
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 20s
+    objects:
+      - kubeVirtOp: unpause
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  - name: stop-vms
+    jobType: kubevirt
+    executionMode: parallel
+    objects:
+      - kubeVirtOp: stop
+        labelSelector: {kube-burner.io/job: create-vms}
+        inputVars:
+          force: false</pre>
+
+<div class="step-hdr">Step 3 — Watch the VMs freeze and thaw</div>
+<pre># Watch VM status change: Running → Paused → Running
+watch "oc get vmi -n burner-pause -o wide"</pre>
+<p>Expected status progression:</p>
+<pre>NAME              PHASE     NODE
+pause-vm-1-1      Running   worker-1
+pause-vm-1-2      Running   worker-1
+# After pause-vms phase:
+pause-vm-1-1      Paused    worker-1
+# After unpause-vms phase:
+pause-vm-1-1      Running   worker-1</pre>
+
+<div class="step-hdr">Step 4 — Push harder</div>
+<p>Increase to 20 VMs for stronger virt-handler pressure:</p>
+<pre>objects:
+  - objectTemplate: vm-pause-template.yml
+    replicas: 20</pre>
+<p>Signs the virt-handler is saturated:</p>
+<ul>
+  <li>Pause operations taking &gt;30 seconds per VM</li>
+  <li>VMIs stuck in <code>Pausing</code> state</li>
+  <li>virt-handler pod CPU at 100% on worker nodes</li>
+</ul>
+
+<div class="step-hdr">Step 5 — Clean up</div>
+<pre>oc delete job kb-vm-pause -n burner-pause 2>/dev/null || true
+oc delete project burner-pause
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt</pre>
+<br><hr><br>
+
+<h2>Troubleshooting</h2>
+<table>
+<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>VMs stuck in <code>Pausing</code></td><td>Reduce replicas or use <code>sequential</code> execution mode</td></tr>
+<tr><td><code>forbidden: virtualmachines/pause</code></td><td>Add pause/unpause to ClusterRole subresources</td></tr>
+<tr><td>Unpause fails after long pause</td><td>If paused &gt;10 minutes, restart the VM instead of unpausing</td></tr>
+<tr><td>Second cycle slower than first</td><td>Expected — QEMU CPU cache reload after unpause is normal</td></tr>
+</tbody>
+</table>
+
+<div class="footer">
+  <p>Kube-Burner v2.6.1 | OpenShift Virtualization | <a href="https://kube-burner.github.io/kube-burner/latest/">kube-burner docs</a></p>
+  <p>Next: <a href="17-vm-hotplug-storage.html">Test 17 — VM Hot-plug Storage</a></p>
+</div>
+</body>
+</html>

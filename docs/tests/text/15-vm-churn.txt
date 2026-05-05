@@ -1,0 +1,227 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                              15-VM-CHURN
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift Virtualization
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+    TEST 15: VM CHURN — CONTINUOUSLY CREATING AND DESTROYING VIRTUAL MACHINES
+================================================================================
+
+  NOTE: Difficulty: Expert (4/4 stars)
+  NOTE: Time to run: 20-60 minutes (configurable duration)
+  NOTE: What it does: Continuously creates and destroys VMs in repeating cycles
+  NOTE: Requires: OpenShift Virtualization (KubeVirt) installed
+
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST?
+--------------------------------------------------------------------------------
+
+Imagine a hotel that never closes -- guests constantly checking in and out.
+The management system must handle a never-ending stream without slowing down.
+
+VM Churn does exactly this to your cluster. It creates a set of VMs, then
+deletes a percentage of them and recreates them from scratch -- over and over
+for the duration of the test.
+
+--------------------------------------------------------------------------------
+  WHY THIS IS THE MOST DEMANDING VIRT TEST
+--------------------------------------------------------------------------------
+
+  What churns                        What it stresses
+  ---------------------------------  -----------------------------------------
+  VirtualMachine object creation     API server write throughput
+  VirtualMachineInstance creation    virt-controller reconciliation loop
+  virt-launcher pod scheduling       Kubernetes scheduler + kubelet
+  Container image pulls              Container runtime + image cache
+  Namespace cleanup                  etcd compaction and GC
+
+--------------------------------------------------------------------------------
+  HOW CHURN WORKS
+--------------------------------------------------------------------------------
+
+  Time ------------------------------------------------------------>
+
+  Phase 1 (Create):   [VM1][VM2][VM3][VM4][VM5][VM6][VM7][VM8]
+                      All VMs exist
+
+  Phase 2 (Churn):    DELETE 25%    CREATE 25%    DELETE 25%
+                      [VM1][VM2]    [VM9][VM10]   [VM3][VM4]
+                      deleted       created        deleted
+
+                      Net result: always ~8 VMs, but 2 replaced each cycle
+
+  Duration:           Run for 20 minutes (configurable)
+
+================================================================================
+  STEP-BY-STEP GUIDE
+================================================================================
+
+------------------------------------------------------------------------
+  STEP 1 -- Create namespace and RBAC
+------------------------------------------------------------------------
+
+  oc new-project burner-churn
+
+  (Apply ServiceAccount, ClusterRole with kubevirt.io resources,
+  and ClusterRoleBinding -- see HTML version for full YAML)
+
+------------------------------------------------------------------------
+  STEP 2 -- Create config files
+------------------------------------------------------------------------
+
+  Create vm-churn-config.yml:
+
+  global:
+    gc: true
+    measurements:
+      - name: podLatency
+        thresholds:
+          - conditionType: Ready
+            metric: P99
+            threshold: 300s
+
+  jobs:
+    - name: vm-churn
+      jobType: create
+      namespace: burner-churn
+      namespacedIterations: true
+      iterationsPerNamespace: 4
+      jobIterations: 2              # 2 namespaces = 8 total VMs
+      qps: 5
+      burst: 5
+      podWait: false
+      waitWhenFinished: true
+      maxWaitTimeout: 10m
+      objects:
+        - objectTemplate: vm-churn-template.yml
+          replicas: 4
+          wait: false
+          inputVars:
+            memory: 128Mi
+      churnConfig:
+        percent: 25
+        duration: 20m
+        delay: 30s
+        deleteDelay: 5s
+        mode: namespaces
+
+  Create vm-churn-template.yml:
+
+  apiVersion: kubevirt.io/v1
+  kind: VirtualMachine
+  metadata:
+    name: churn-vm-{{.Iteration}}-{{.Replica}}
+    labels:
+      app: burner-churn
+  spec:
+    running: true                   # Start immediately -- maximises pressure
+    template:
+      metadata:
+        labels:
+          app: burner-churn
+      spec:
+        domain:
+          resources:
+            requests:
+              memory: "{{.memory}}"
+          devices:
+            disks:
+              - name: containerdisk
+                disk: {bus: virtio}
+            interfaces:
+              - name: default
+                masquerade: {}
+        networks:
+          - name: default
+            pod: {}
+        volumes:
+          - name: containerdisk
+            containerDisk:
+              image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+
+------------------------------------------------------------------------
+  STEP 3 -- Package and run
+------------------------------------------------------------------------
+
+  oc create configmap vm-churn-config \
+    --from-file=config.yml=vm-churn-config.yml \
+    --from-file=vm-churn-template.yml=vm-churn-template.yml \
+    -n burner-churn
+
+  (Apply the Job -- see HTML version or examples/ocp-job-churn.yaml)
+
+  Watch:
+    oc logs -f job/kb-vm-churn -n burner-churn
+
+------------------------------------------------------------------------
+  STEP 4 -- Monitor the churn
+------------------------------------------------------------------------
+
+  # Watch VM state changes
+  watch "oc get vm -A | grep churn"
+
+  # Watch namespace creation/deletion
+  watch "oc get ns | grep churn"
+
+  You should see namespaces appearing and disappearing every ~30 seconds.
+
+------------------------------------------------------------------------
+  STEP 5 -- Push harder
+------------------------------------------------------------------------
+
+  For maximum pressure:
+
+  jobIterations: 10
+  iterationsPerNamespace: 10   # 100 total VMs
+  churnConfig:
+    percent: 30
+    duration: 1h
+    delay: 10s
+    deleteDelay: 0s
+
+------------------------------------------------------------------------
+  STEP 6 -- Signs the cluster is at its limit
+------------------------------------------------------------------------
+
+  Observation                          Meaning
+  -----------------------------------  ---------------------------------------
+  Churn cycles 5x longer than delay   virt-controller queue is saturated
+  VMs stuck in Scheduling >5 minutes  Scheduler overwhelmed or nodes full
+  etcd leader elections               etcd under excessive write pressure
+  API server 429 errors               Rate-limiting engaged
+  Exit code 4                         P99 boot time exceeded 300s threshold
+
+------------------------------------------------------------------------
+  STEP 7 -- Clean up
+------------------------------------------------------------------------
+
+  oc delete job kb-vm-churn -n burner-churn 2>/dev/null || true
+  oc delete project burner-churn
+  oc delete clusterrole kube-burner-virt
+  oc delete clusterrolebinding kube-burner-virt
+  oc get ns | grep churn | awk '{print $1}' | xargs oc delete ns
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+  Problem                        Fix
+  -----------------------------  -----------------------------------------------
+  VMs never reach Running        Reduce replicas and churn percent
+  Churn cycles never complete    Reduce percent from 25 to 10
+  Namespace deletion stuck       oc delete ns <name> --force --grace-period=0
+  Image pull fails               Use locally mirrored image
+  kube-burner timeout            Add --timeout=2h or reduce churn duration
+
+================================================================================
+  END OF TEST 15
+================================================================================
+  Next test: 16-vm-pause-unpause -- freeze and thaw VMs at scale
+================================================================================

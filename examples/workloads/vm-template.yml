@@ -1,0 +1,38 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: burner-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner-virt
+    kube-burner-job: "{{.JobName}}"
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        app: kube-burner-virt
+        name: burner-vm-{{.Iteration}}-{{.Replica}}
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        memory:
+          guest: 64Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+        resources:
+          requests:
+            memory: 64Mi
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-container-disk-demo:latest

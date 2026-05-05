@@ -1,0 +1,749 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ==============================================================
+  # ROUND 1: 4 Windows + 2 RHEL  |  3 churn cycles  |  ~36Gi RAM
+  # Win create timeout: 30m  |  RHEL create timeout: 15m
+  # ==============================================================
+  - name: r01-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 4
+
+  - name: r01-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 2
+
+  # ------------ Churn Cycle 1 of 3 ------------
+  - name: r01-c1-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-win
+
+  - name: r01-c1-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 4
+
+  - name: r01-c1-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-rh
+
+  - name: r01-c1-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 2
+
+  # ------------ Churn Cycle 2 of 3 ------------
+  - name: r01-c2-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre-win
+
+  - name: r01-c2-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 4
+
+  - name: r01-c2-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre-rh
+
+  - name: r01-c2-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 2
+
+  # ------------ Churn Cycle 3 of 3 (final) ----
+  - name: r01-c3-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c2-cre-win
+
+  - name: r01-c3-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 4
+
+  - name: r01-c3-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c2-cre-rh
+
+  - name: r01-c3-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 2
+
+  # ------------ Round 1 cleanup -------------------
+  - name: r01-final-del
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-churn
+
+  # ==============================================================
+  # ROUND 2: 7 Windows + 3 RHEL  |  3 churn cycles  |  ~62Gi RAM
+  # Win create timeout: 45m  |  RHEL create timeout: 15m
+  # ==============================================================
+  - name: r02-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 7
+
+  - name: r02-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 3
+
+  # ------------ Churn Cycle 1 of 3 ------------
+  - name: r02-c1-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-win
+
+  - name: r02-c1-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 7
+
+  - name: r02-c1-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-rh
+
+  - name: r02-c1-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 3
+
+  # ------------ Churn Cycle 2 of 3 ------------
+  - name: r02-c2-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre-win
+
+  - name: r02-c2-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 7
+
+  - name: r02-c2-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre-rh
+
+  - name: r02-c2-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 3
+
+  # ------------ Churn Cycle 3 of 3 (final) ----
+  - name: r02-c3-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c2-cre-win
+
+  - name: r02-c3-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 7
+
+  - name: r02-c3-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c2-cre-rh
+
+  - name: r02-c3-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 3
+
+  # ------------ Round 2 cleanup -------------------
+  - name: r02-final-del
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-churn
+
+  # ==============================================================
+  # ROUND 3: 14 Windows + 6 RHEL  |  3 churn cycles  |  ~124Gi RAM
+  # Win create timeout: 60m  |  RHEL create timeout: 20m
+  # ==============================================================
+  - name: r03-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 14
+
+  - name: r03-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 6
+
+  # ------------ Churn Cycle 1 of 3 ------------
+  - name: r03-c1-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-win
+
+  - name: r03-c1-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 14
+
+  - name: r03-c1-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-rh
+
+  - name: r03-c1-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 6
+
+  # ------------ Churn Cycle 2 of 3 ------------
+  - name: r03-c2-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-win
+
+  - name: r03-c2-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 14
+
+  - name: r03-c2-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-rh
+
+  - name: r03-c2-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 6
+
+  # ------------ Churn Cycle 3 of 3 (final) ----
+  - name: r03-c3-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-win
+
+  - name: r03-c3-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 14
+
+  - name: r03-c3-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-rh
+
+  - name: r03-c3-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 6
+
+  # ------------ Round 3 cleanup -------------------
+  - name: r03-final-del
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-churn
+
+  # ==============================================================
+  # ROUND 4: 21 Windows + 9 RHEL  |  2 churn cycles  |  ~186Gi RAM
+  # Win create timeout: 90m  |  RHEL create timeout: 25m
+  # ==============================================================
+  - name: r04-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 21
+
+  - name: r04-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 25m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 9
+
+  # ------------ Churn Cycle 1 of 2 ------------
+  - name: r04-c1-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-win
+
+  - name: r04-c1-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 21
+
+  - name: r04-c1-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-rh
+
+  - name: r04-c1-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 25m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 9
+
+  # ------------ Churn Cycle 2 of 2 (final) ----
+  - name: r04-c2-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-win
+
+  - name: r04-c2-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 21
+
+  - name: r04-c2-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-rh
+
+  - name: r04-c2-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 25m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 9
+
+  # ------------ Round 4 cleanup -------------------
+  - name: r04-final-del
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-churn
+
+  # ==============================================================
+  # ROUND 5: 28 Windows + 12 RHEL  |  2 churn cycles  |  ~248Gi RAM
+  # Win create timeout: 120m  |  RHEL create timeout: 30m
+  # ==============================================================
+  - name: r05-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 28
+
+  - name: r05-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 12
+
+  # ------------ Churn Cycle 1 of 2 ------------
+  - name: r05-c1-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-cre-win
+
+  - name: r05-c1-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 28
+
+  - name: r05-c1-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-cre-rh
+
+  - name: r05-c1-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 12
+
+  # ------------ Churn Cycle 2 of 2 (final) ----
+  - name: r05-c2-del-win
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-c1-cre-win
+
+  - name: r05-c2-cre-win
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: vm-template-windows.yml
+        replicas: 28
+
+  - name: r05-c2-del-rh
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-c1-cre-rh
+
+  - name: r05-c2-cre-rh
+    namespace: burner-mixed-churn
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template-rhel.yml
+        replicas: 12
+
+  # ------------ Round 5 cleanup -------------------
+  - name: r05-final-del
+    namespace: burner-mixed-churn
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-churn

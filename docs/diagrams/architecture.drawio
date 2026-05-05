@@ -1,0 +1,111 @@
+<mxfile host="app.diagrams.net" modified="2026-04-23T14:00:00Z" agent="kube-burner-docs" version="21.0.0" type="device">
+  <diagram id="arch-001" name="Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══ Title ═══ -->
+        <mxCell id="title" value="kube-burner Architecture — Interaction with the Cluster" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="700" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Inputs (left) ═══ -->
+        <mxCell id="cfg" value="config.yml" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=0.27;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="75" width="130" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="kubeconfig" value="KUBECONFIG&#xa;/ ServiceAccount" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=0.27;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="155" width="130" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ kube-burner ═══ -->
+        <mxCell id="kb" value="kube-burner v2.6.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=14;fontStyle=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="460" y="80" width="200" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Right-side outputs ═══ -->
+        <mxCell id="prom" value="Prometheus&#xa;(OCP built-in monitoring)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="850" y="75" width="185" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="idx" value="Indexer&#xa;(local / OpenSearch / ES)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="850" y="155" width="185" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Cluster boundary ═══ -->
+        <mxCell id="cluster-bg" value="OpenShift / Kubernetes Cluster" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#0e4d92;strokeWidth=2;dashed=1;dashPattern=8 4;verticalAlign=top;fontSize=13;fontColor=#0e4d92;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="210" width="720" height="500" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Inside cluster ═══ -->
+        <mxCell id="api" value="API Server&#xa;(RBAC enforced)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="435" y="270" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="sched" value="Scheduler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="190" y="400" width="140" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="nodes" value="Worker Nodes (×3)&#xa;kubelet on each" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="415" y="400" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="etcd" value="etcd" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="388" width="100" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="sa" value="ServiceAccount&#xa;+ ClusterRole&#xa;(ocp-rbac.yaml)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="660" y="270" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="res" value="Created Resources&#xa;Pods · Deployments · Services · ConfigMaps · VirtualMachines" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="180" y="530" width="540" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ In-cluster Job note ═══ -->
+        <mxCell id="job-note" value="In-cluster execution:&#xa;kube-burner runs as a&#xa;Kubernetes Job inside OCP&#xa;(see ocp-job.yaml)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;dashed=1;dashPattern=6 3;" vertex="1" parent="1">
+          <mxGeometry x="180" y="640" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sno-note" value="SNO critical constraint:&#xa;250-pod node limit.&#xa;~224 system pods consumed.&#xa;Only ~26 slots available." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;dashed=1;dashPattern=6 3;" vertex="1" parent="1">
+          <mxGeometry x="490" y="640" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Edges: inputs → kube-burner ═══ -->
+        <mxCell id="e-cfg-kb" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cfg" target="kb" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-kubeconfig-kb" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="kubeconfig" target="kb" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Edges: kube-burner → outputs ═══ -->
+        <mxCell id="e-kb-prom" value="scrape metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" edge="1" source="kb" target="prom" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-kb-idx" value="write results" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" edge="1" source="kb" target="idx" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Edges: kube-burner → API Server ═══ -->
+        <mxCell id="e-kb-api" value="create / read / patch&#xa;delete / kubevirt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" source="kb" target="api" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Edges: inside cluster ═══ -->
+        <mxCell id="e-api-sched" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="api" target="sched" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-nodes" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="api" target="nodes" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-etcd" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="api" target="etcd" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-sched-nodes" value="schedules" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;fontSize=11;" edge="1" source="sched" target="nodes" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-nodes-res" value="runs containers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" source="nodes" target="res" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-api-sa" value="RBAC check" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;fontSize=11;" edge="1" source="api" target="sa" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

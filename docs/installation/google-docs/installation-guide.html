@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kube-Burner Installation Guide</title>
+  <!--
+    GOOGLE DOCS IMPORT INSTRUCTIONS
+    ================================
+    1. Go to https://docs.google.com
+    2. Click the folder icon (Open file picker) or File > Open
+    3. Select the "Upload" tab
+    4. Upload this file (installation-guide.html)
+    5. Google Docs will convert it automatically, preserving headings,
+       tables, bold text, and code formatting.
+  -->
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #202124;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    h1 { font-size: 24pt; color: #1a1a1a; margin-top: 0; }
+    h2 { font-size: 16pt; color: #1a1a1a; border-bottom: 1px solid #dadce0; padding-bottom: 4px; margin-top: 32px; }
+    h3 { font-size: 13pt; color: #1a1a1a; margin-top: 24px; }
+    h4 { font-size: 11pt; color: #1a1a1a; margin-top: 16px; }
+    p  { margin: 8px 0; }
+    a  { color: #1a73e8; }
+
+    /* Meta line under title */
+    .doc-meta { color: #5f6368; font-size: 10pt; margin-bottom: 24px; }
+
+    /* Callout / note boxes */
+    .callout {
+      border-left: 4px solid #1a73e8;
+      background: #e8f0fe;
+      padding: 10px 16px;
+      margin: 16px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .callout.warning {
+      border-left-color: #f9ab00;
+      background: #fef7e0;
+    }
+    .callout.danger {
+      border-left-color: #d93025;
+      background: #fce8e6;
+    }
+    .callout strong { display: block; margin-bottom: 4px; }
+
+    /* Code blocks */
+    pre {
+      background: #f8f9fa;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      padding: 12px 16px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 9.5pt;
+      overflow-x: auto;
+      line-height: 1.5;
+      white-space: pre;
+    }
+    code {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 9.5pt;
+      background: #f1f3f4;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    /* Tables */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+      font-size: 10.5pt;
+    }
+    thead tr { background-color: #1a73e8; color: #ffffff; }
+    thead th { padding: 10px 12px; text-align: left; font-weight: bold; }
+    tbody tr:nth-child(even) { background-color: #f8f9fa; }
+    tbody tr:nth-child(odd)  { background-color: #ffffff; }
+    tbody td { padding: 8px 12px; border-bottom: 1px solid #dadce0; }
+
+    /* Numbered step header */
+    .step-header {
+      background: #1a73e8;
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 12pt;
+      font-weight: bold;
+      margin: 24px 0 12px;
+    }
+
+    /* Section divider */
+    hr { border: none; border-top: 1px solid #dadce0; margin: 32px 0; }
+
+    /* Lists */
+    ul, ol { margin: 8px 0 8px 24px; }
+    li { margin: 4px 0; }
+
+    /* Footer */
+    .footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid #dadce0;
+      color: #5f6368;
+      font-size: 9.5pt;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Kube-Burner Installation Guide</h1>
+  <div class="doc-meta">
+    <strong>Product:</strong> Kube-Burner v2.6.1 &nbsp;|&nbsp;
+    <strong>Platforms:</strong> macOS &middot; Linux &middot; OpenShift 4.x &middot; Kubernetes 1.29+ &nbsp;|&nbsp;
+    <strong>Last validated:</strong> April 2026 &mdash; tested live on OCP 4.18.20 and OCP 4.21.8
+  </div>
+
+  <hr>
+
+  <!-- ═══ 0. PRE-FLIGHT CHECKLIST ══════════════════════════════════════════ -->
+  <h2>0. Pre-Flight Checklist &mdash; Is Kube-Burner Already Installed?</h2>
+
+  <p>
+    <strong>Run these checks first.</strong> Before installing anything, spend 30 seconds
+    finding out whether kube-burner is already on the system or already running in the cluster.
+    This saves time and avoids duplicate installs.
+  </p>
+
+  <h3>Check 1 &mdash; Is the binary installed locally?</h3>
+  <pre>which kube-burner 2>&amp;1 &amp;&amp; kube-burner version 2>&amp;1</pre>
+  <table>
+    <thead><tr><th>Output</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>A file path + version number</td><td>&#9989; Already installed locally &mdash; skip Method 1</td></tr>
+      <tr><td><code>kube-burner: command not found</code></td><td>&#10060; Not installed locally &mdash; follow Method 1 or Method 2 below</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Check 2 &mdash; Is kube-burner running as a pod in the cluster?</h3>
+  <pre>oc get pods -A 2>&amp;1 | grep -i kube-burner</pre>
+  <table>
+    <thead><tr><th>Output</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>Lines showing pods in <code>Running</code> or <code>Completed</code> state</td><td>&#9989; kube-burner has been used in this cluster before</td></tr>
+      <tr><td>No output</td><td>Not currently running (may still have RBAC from a previous install)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Check 3 &mdash; Are there completed Jobs from previous runs?</h3>
+  <pre>oc get jobs -A 2>&amp;1 | grep -i kube-burner</pre>
+  <p>If you see <code>Complete</code> Jobs, kube-burner has been run successfully on this cluster. View the logs of any past run:</p>
+  <pre># Replace &lt;namespace&gt; and &lt;job-name&gt; with values from the output above
+oc logs job/&lt;job-name&gt; -n &lt;namespace&gt;</pre>
+
+  <h3>Check 4 &mdash; Is the RBAC already in place?</h3>
+  <pre>oc get serviceaccount kube-burner -A 2>&amp;1
+oc get clusterrole kube-burner 2>&amp;1
+oc get clusterrolebinding kube-burner 2>&amp;1</pre>
+  <table>
+    <thead><tr><th>Output</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>All three return names/ages</td><td>&#9989; RBAC already set up &mdash; skip Step 2 of Method 2</td></tr>
+      <tr><td><code>Error from server (NotFound)</code></td><td>&#10060; RBAC not applied &mdash; must run Step 2 before benchmarking</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Check 5 &mdash; Are there existing workload ConfigMaps?</h3>
+  <pre>oc get configmap -A 2>&amp;1 | grep -i kube-burner</pre>
+  <p>If ConfigMaps like <code>kube-burner-config</code> or <code>kube-burner-alerts-cfg</code> appear, workload files are already loaded and ready to use.</p>
+
+  <h3>What to do with the results</h3>
+  <table>
+    <thead><tr><th>Situation</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Binary + RBAC + ConfigMaps all exist</td><td>&#9989; Ready to run a test right now &mdash; go to <code>docs/tests/</code></td></tr>
+      <tr><td>Binary missing, but RBAC exists</td><td>Run kube-burner as an in-cluster Job (Method 2) &mdash; cluster is already prepared</td></tr>
+      <tr><td>Nothing exists</td><td>Follow Method 1 (local binary) or Method 2 (in-cluster Job) below</td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <!-- ═══ 1. OVERVIEW ═══════════════════════════════════════════════════════ -->
+  <h2>1. Overview</h2>
+
+  <p>
+    Kube-Burner is a Kubernetes performance and scale test orchestration tool written in Go.
+    It uses the official <code>client-go</code> library to create, read, patch, and delete
+    cluster resources at configurable rates, collect Prometheus metrics, and measure pod
+    scheduling latency in real time.
+  </p>
+
+  <p>There are two ways to install and run kube-burner:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Best for</th>
+        <th>Requires local network access to cluster</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Local binary</strong></td><td>Development, quick tests, vanilla Kubernetes</td><td>Yes</td></tr>
+      <tr><td><strong>In-cluster Job</strong></td><td>OpenShift, production benchmarks, CI pipelines</td><td>No &mdash; runs inside the cluster</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Recommendation</strong>
+    For OpenShift environments, use the <strong>in-cluster Job</strong> approach. It is more
+    reliable, avoids firewall restrictions, and reflects how kube-burner is used in
+    production Red Hat performance testing.
+  </div>
+
+  <hr>
+
+  <!-- ═══ 2. PREREQUISITES ══════════════════════════════════════════════════ -->
+  <h2>2. Prerequisites</h2>
+
+  <h3>For Local Binary Installation</h3>
+  <table>
+    <thead>
+      <tr><th>Requirement</th><th>Minimum Version</th><th>Verification Command</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>macOS or Linux</td><td>&mdash;</td><td><code>uname -a</code></td></tr>
+      <tr><td><code>curl</code></td><td>Any</td><td><code>curl --version</code></td></tr>
+      <tr><td><code>kubectl</code> or <code>oc</code></td><td>1.28+ / 4.12+</td><td><code>kubectl version --client</code></td></tr>
+      <tr><td>Cluster access</td><td>&mdash;</td><td><code>kubectl get nodes</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>For In-Cluster Job (OpenShift)</h3>
+  <table>
+    <thead>
+      <tr><th>Requirement</th><th>Minimum Version</th><th>Verification Command</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>OpenShift CLI (<code>oc</code>)</td><td>4.12+</td><td><code>oc version</code></td></tr>
+      <tr><td>Cluster admin access</td><td>&mdash;</td><td><code>oc whoami</code></td></tr>
+      <tr><td><code>quay.io</code> reachable from cluster</td><td>&mdash;</td><td><code>oc run test --image=quay.io/kube-burner/kube-burner:v2.6.1 --restart=Never --command -- kube-burner version</code></td></tr>
+      <tr><td>OpenShift Virtualization (virt tests only)</td><td>&mdash;</td><td><code>oc get hyperconverged -A</code> &mdash; expected output:<br><pre>NAMESPACE       NAME                      AGE
+openshift-cnv   kubevirt-hyperconverged   73m</pre></td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <!-- ═══ 3. METHOD 1 ═══════════════════════════════════════════════════════ -->
+  <h2>3. Method 1 &mdash; Local Binary</h2>
+
+  <h3>3.1 macOS</h3>
+  <p>Run the official install script. It detects your architecture (ARM64 or AMD64) automatically:</p>
+  <pre>curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh</pre>
+
+  <p>The binary is installed to <code>~/.local/bin/kube-burner</code>. Add that directory to your PATH:</p>
+  <pre>echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc</pre>
+  <p>For bash, replace <code>~/.zshrc</code> with <code>~/.bashrc</code>.</p>
+
+  <h3>3.2 Linux</h3>
+  <p>The same install script works on Linux (x86_64 and ARM64):</p>
+  <pre>curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh</pre>
+
+  <p>To install to a system-wide location, set <code>INSTALL_DIR</code> before running:</p>
+  <pre>INSTALL_DIR=/usr/local/bin \
+  curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh</pre>
+
+  <h4>Manual Download (optional)</h4>
+  <pre>VERSION=v2.6.1
+curl -LO "https://github.com/kube-burner/kube-burner/releases/download/${VERSION}/kube-burner-${VERSION}-linux-x86_64.tar.gz"
+tar -xzf kube-burner-*.tar.gz
+chmod +x kube-burner
+mv kube-burner ~/.local/bin/</pre>
+
+  <h3>3.3 Verify the Installation</h3>
+  <pre>kube-burner version</pre>
+  <p>Expected output:</p>
+  <pre>Version: v2.6.1
+Git commit: 197bd3367ee5bdc6584c21f77c522888b2ad65ac
+Build date: 2025-03-01T12:00:00Z
+Go version: go1.22.0</pre>
+
+  <p>Run the built-in cluster health check to confirm connectivity:</p>
+  <pre>kube-burner health-check</pre>
+  <p>Expected output on a healthy cluster:</p>
+  <pre>time="..." level=info msg="Checking for Cluster Health"
+time="..." level=info msg="Cluster is healthy."</pre>
+
+  <hr>
+
+  <!-- ═══ 4. METHOD 2 ═══════════════════════════════════════════════════════ -->
+  <h2>4. Method 2 &mdash; In-Cluster Job (Recommended for OpenShift)</h2>
+
+  <p>
+    This method runs kube-burner as a Kubernetes <code>Job</code> inside the target cluster
+    using the official container image at <code>quay.io/kube-burner/kube-burner:v2.6.1</code>.
+  </p>
+
+  <p><strong>Why in-cluster?</strong></p>
+  <ul>
+    <li>No local network path to the API server required.</li>
+    <li>Credentials come from a <code>ServiceAccount</code> &mdash; no kubeconfig to manage.</li>
+    <li>The same pattern used by Red Hat performance engineering teams.</li>
+    <li>Works reliably behind firewalls and in CI pipelines.</li>
+  </ul>
+
+  <!-- Step 1 -->
+  <div class="step-header">Step 1 &mdash; Create the Benchmark Namespace</div>
+  <pre># Vanilla Kubernetes
+kubectl create namespace burner-test
+
+# OpenShift  (do NOT use the "kube-" prefix — reserved by OCP)
+oc new-project burner-test</pre>
+  <div class="callout warning">
+    <strong>OpenShift Constraint</strong>
+    Project names starting with <code>kube-</code> are reserved for internal system use.
+    Use a different prefix such as <code>burner-</code>, <code>perf-</code>, or <code>bench-</code>.
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step-header">Step 2 &mdash; Apply RBAC</div>
+  <p>
+    Kube-burner requires a <code>ServiceAccount</code> with a <code>ClusterRole</code> that
+    grants permissions to create and manage resources cluster-wide. Apply the pre-validated
+    RBAC manifest:
+  </p>
+  <pre>oc apply -f examples/ocp-rbac.yaml</pre>
+
+  <p>This creates three resources:</p>
+  <table>
+    <thead>
+      <tr><th>Resource</th><th>Name</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>ServiceAccount</code></td><td><code>kube-burner</code></td><td>Identity for the in-cluster pod</td></tr>
+      <tr><td><code>ClusterRole</code></td><td><code>kube-burner</code></td><td>Defines the allowed API operations</td></tr>
+      <tr><td><code>ClusterRoleBinding</code></td><td><code>kube-burner</code></td><td>Binds the role to the ServiceAccount</td></tr>
+    </tbody>
+  </table>
+
+  <p>The ClusterRole grants access to the following resources:</p>
+  <pre>rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, configmaps, nodes, events]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: ["apps"]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: ["batch"]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]</pre>
+  <div class="callout">
+    <strong>Important: events permission</strong>
+    The <code>events</code> resource is required for <code>podLatency</code> measurements.
+    Without it, kube-burner logs <em>"events is forbidden"</em> and latency data is incomplete.
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step-header">Step 3 &mdash; Package Your Workload as a ConfigMap</div>
+  <p>
+    Kube-burner reads its configuration from files. When running in-cluster, these files
+    are delivered via a <code>ConfigMap</code>:
+  </p>
+  <pre>oc create configmap kube-burner-config \
+  --from-file=config.yml=examples/workloads/pod-density-ocp.yml \
+  --from-file=pod.yml=examples/workloads/pod-template-ocp.yml \
+  -n burner-test</pre>
+  <p>For a node-density workload with Deployment and Service templates:</p>
+  <pre>oc create configmap kube-burner-config \
+  --from-file=config.yml=examples/workloads/node-density-ocp.yml \
+  --from-file=deployment.yml=examples/workloads/deployment-template-ocp.yml \
+  --from-file=service.yml=examples/workloads/service-template-ocp.yml \
+  -n burner-test</pre>
+
+  <!-- Step 4 -->
+  <div class="step-header">Step 4 &mdash; Apply the Job Manifest</div>
+  <pre>oc apply -f examples/ocp-job.yaml</pre>
+
+  <p>
+    The Job uses an <code>initContainer</code> to copy the read-only ConfigMap into a
+    writable <code>emptyDir</code> volume before the main container starts. This is
+    necessary because kube-burner writes a log file at startup.
+  </p>
+  <pre>apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-burner-pod-density
+  namespace: burner-test
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - { name: config-src, mountPath: /config-src }
+            - { name: workdir,    mountPath: /config }
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=my-benchmark-001
+            - --log-level=info
+          volumeMounts:
+            - { name: workdir, mountPath: /config }
+      volumes:
+        - name: config-src
+          configMap:
+            name: kube-burner-config
+        - name: workdir
+          emptyDir: {}</pre>
+
+  <!-- Step 5 -->
+  <div class="step-header">Step 5 &mdash; Monitor the Run</div>
+  <p><strong>Check Job and pod status:</strong></p>
+  <pre>oc get job kube-burner-pod-density -n burner-test
+oc get pods -n burner-test -w</pre>
+  <p><strong>Stream logs in real time:</strong></p>
+  <pre>oc logs -f job/kube-burner-pod-density -n burner-test</pre>
+  <p>A successful run produces output similar to:</p>
+  <pre>time="2026-04-23 14:03:28" level=info  msg="Starting kube-burner (v2.6.1) with UUID my-benchmark-001"
+time="2026-04-23 14:03:39" level=info  msg="Pre-load: All images pulled on 3 nodes"
+time="2026-04-23 14:03:52" level=info  msg="Triggering job: pod-density"
+time="2026-04-23 14:03:56" level=info  msg="pod-density: Ready 99th: 2000 ms   max: 2000 ms"
+time="2026-04-23 14:03:56" level=info  msg="pod-density: PodScheduled 99th: 0 ms"
+time="2026-04-23 14:04:21" level=info  msg="Finished execution with UUID: my-benchmark-001"</pre>
+  <p><strong>Check the exit code after the Job completes:</strong></p>
+  <pre>oc get pod -l job-name=kube-burner-pod-density -n burner-test \
+  -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'
+# 0 = success
+# 3 = alert threshold breached</pre>
+
+  <!-- Step 6 -->
+  <div class="step-header">Step 6 &mdash; Clean Up</div>
+  <pre># Delete the Job object
+oc delete job kube-burner-pod-density -n burner-test
+
+# Delete the ConfigMap
+oc delete configmap kube-burner-config -n burner-test
+
+# Delete all namespaces and resources created by the benchmark
+oc delete project burner-test</pre>
+
+  <hr>
+
+  <!-- ═══ 5. OCP CONSTRAINTS ═══════════════════════════════════════════════ -->
+  <h2>5. OpenShift-Specific Constraints</h2>
+
+  <h3>Namespace Naming</h3>
+  <p>
+    OpenShift reserves the <code>kube-</code> prefix for internal system projects. Attempting
+    to create a project with this prefix produces the error:
+  </p>
+  <pre>Error from server (Forbidden): project "kube-burner-test" is forbidden:
+cannot request a project starting with "kube-"</pre>
+  <p><strong>Solution:</strong> Use any other prefix. Examples: <code>burner-</code>, <code>perf-</code>, <code>bench-</code>, <code>load-</code>.</p>
+
+  <h3>Single Node OpenShift (SNO) Pod Limit</h3>
+  <p>
+    SNO nodes have a hard limit of 250 pods. Approximately 224 pods are consumed by
+    OpenShift system components, leaving roughly 26 slots for workloads. If a benchmark
+    schedules more pods than available, they remain stuck in <code>Pending</code> with the
+    event <em>"Too many pods"</em>.
+  </p>
+  <div class="callout danger">
+    <strong>Before running any benchmark on SNO, calculate available capacity:</strong>
+  </div>
+  <pre>NODE=$(oc get nodes --no-headers -o custom-columns=NAME:.metadata.name | head -1)
+LIMIT=$(oc get node $NODE -o jsonpath='{.status.allocatable.pods}')
+RUNNING=$(oc get pods -A --no-headers | grep -c Running)
+AVAILABLE=$(( LIMIT - RUNNING ))
+echo "Available pod slots: $AVAILABLE"</pre>
+  <p>Keep your workload below 80% of the available slots to allow headroom for system churn.</p>
+
+  <hr>
+
+  <!-- ═══ 6. TROUBLESHOOTING ═══════════════════════════════════════════════ -->
+  <h2>6. Troubleshooting</h2>
+
+  <table>
+    <thead>
+      <tr><th>Symptom</th><th>Root Cause</th><th>Resolution</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>open config.yml: permission denied</code></td>
+        <td>ConfigMap volume is read-only; kube-burner writes a log file on startup</td>
+        <td>Use the <code>initContainer</code> + <code>emptyDir</code> pattern from Step 4</td>
+      </tr>
+      <tr>
+        <td><code>events is forbidden</code> in pod logs</td>
+        <td>ClusterRole is missing <code>events</code> permission</td>
+        <td>Re-apply <code>examples/ocp-rbac.yaml</code>, which grants <code>events</code> access</td>
+      </tr>
+      <tr>
+        <td><code>cannot request a project starting with "kube-"</code></td>
+        <td>OCP namespace reservation</td>
+        <td>Rename the namespace; do not use the <code>kube-</code> prefix</td>
+      </tr>
+      <tr>
+        <td>Pods stuck in <code>Pending: Too many pods</code></td>
+        <td>SNO 250-pod node limit reached</td>
+        <td>Calculate free slots (Section 5) and reduce workload size</td>
+      </tr>
+      <tr>
+        <td><code>command not found: kube-burner</code></td>
+        <td>Binary not on <code>PATH</code></td>
+        <td>Run <code>export PATH="$HOME/.local/bin:$PATH"</code></td>
+      </tr>
+      <tr>
+        <td><code>health-check</code> fails: <code>Forbidden</code></td>
+        <td>Local binary blocked by network policy or firewall</td>
+        <td>Switch to the in-cluster Job approach (Method 2)</td>
+      </tr>
+      <tr>
+        <td>Job pod never starts (stuck in <code>Pending</code>)</td>
+        <td>RBAC not applied or ServiceAccount missing</td>
+        <td>Verify: <code>oc get sa kube-burner -n burner-test</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <!-- ═══ 7. NEXT STEPS ════════════════════════════════════════════════════ -->
+  <h2>7. Next Steps</h2>
+
+  <table>
+    <thead>
+      <tr><th>Topic</th><th>Location</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Run all job types step-by-step with real results</td><td><code>docs/all-tests-guide.md</code></td></tr>
+      <tr><td>Full configuration reference</td><td><code>docs/configuration.md</code></td></tr>
+      <tr><td>Running on multi-node OpenShift</td><td><code>docs/running-on-ocp.md</code></td></tr>
+      <tr><td>Running on Single Node OpenShift (SNO)</td><td><code>docs/running-on-sno.md</code></td></tr>
+      <tr><td>Live benchmark results from 3 clusters</td><td><code>docs/benchmark-results.md</code></td></tr>
+      <tr><td>Architecture and lifecycle diagrams</td><td><code>docs/diagrams/</code></td></tr>
+      <tr><td>Workload YAML examples</td><td><code>examples/workloads/</code></td></tr>
+      <tr><td>RBAC manifest</td><td><code>examples/ocp-rbac.yaml</code></td></tr>
+      <tr><td>In-cluster Job manifest</td><td><code>examples/ocp-job.yaml</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>
+      Kube-Burner is an open-source project maintained by the Red Hat performance engineering
+      team and the broader Kubernetes community.<br>
+      Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
+      &nbsp;&mdash;&nbsp;
+      Documentation: <a href="https://kube-burner.github.io/kube-burner/latest/">kube-burner.github.io</a>
+    </p>
+  </div>
+
+</body>
+</html>

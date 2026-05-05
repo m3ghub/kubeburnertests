@@ -1,0 +1,294 @@
+<mxfile host="app.diagrams.net" modified="2026-04-23T14:00:00Z" agent="kube-burner-docs" version="21.0.0" type="device">
+  <diagram id="dt-001" name="Test Type Decision Tree">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══ Title ═══ -->
+        <mxCell id="title" value="kube-burner — Which Test Type Should I Use?" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="700" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Root node ═══ -->
+        <mxCell id="root" value="What do you need?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=14;fontStyle=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="460" y="65" width="200" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Level 2: Category nodes ═══ -->
+        <mxCell id="cat1" value="Generate load&#xa;on the cluster" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="200" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="cat2" value="Interact with&#xa;existing objects" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="270" y="200" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="cat3" value="Observe &amp; measure&#xa;without creating" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="200" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="cat4" value="Manage the&#xa;benchmark run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="200" width="160" height="55" as="geometry" />
+        </mxCell>
+        <!-- KubeVirt needs its own category -->
+        <mxCell id="cat5" value="Lifecycle&#xa;KubeVirt VMs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="475" y="200" width="160" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Root → Category edges ═══ -->
+        <mxCell id="e-r-c1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="root" target="cat1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-r-c2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="root" target="cat2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-r-c3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="root" target="cat3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-r-c4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="root" target="cat4" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-r-c5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="root" target="cat5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Level 3: Specific jobType / subcommand leaves ═══ -->
+
+        <!-- Under "Generate load" (cat1) -->
+        <mxCell id="l1a" value="jobType: create&#xa;Pods / Deployments / Services&#xa;/ ConfigMaps at scale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="30" y="380" width="165" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="l1b" value="jobType: create&#xa;+ churnConfig&#xa;Namespace lifecycle churn&#xa;(delete &amp; recreate loop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="490" width="165" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Under "Interact with existing objects" (cat2) -->
+        <mxCell id="l2a" value="jobType: read&#xa;GET objects by label&#xa;Rate-limited API pressure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="235" y="380" width="165" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="l2b" value="jobType: patch&#xa;Apply JSON/merge patch&#xa;to matching objects" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="235" y="455" width="165" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="l2c" value="jobType: delete&#xa;Remove objects by label&#xa;without deleting namespace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="235" y="530" width="165" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Under "KubeVirt VMs" (cat5) -->
+        <mxCell id="l5" value="jobType: kubevirt&#xa;start / stop / restart&#xa;VirtualMachine objects&#xa;(OCP Virtualization)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="450" y="380" width="165" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- Under "Observe & measure" (cat3) -->
+        <mxCell id="l3a" value="subcommand: measure&#xa;Watch existing pods for N s&#xa;Report latency transitions&#xa;Start before pod creation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="570" y="380" width="165" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="l3b" value="subcommand: check-alerts&#xa;Evaluate Prometheus rules&#xa;over benchmark time window" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="570" y="465" width="165" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="l3c" value="subcommand: index&#xa;Collect Prometheus metrics&#xa;for a historical time range" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="570" y="540" width="165" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Under "Manage benchmark run" (cat4) -->
+        <mxCell id="l4a" value="subcommand: init&#xa;Run a full benchmark&#xa;from a config.yml" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="845" y="380" width="165" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="l4b" value="subcommand: destroy&#xa;Delete all objects created&#xa;by a prior init run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="845" y="455" width="165" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="l4c" value="subcommand: health-check&#xa;Verify API server reachable&#xa;Exit 0 if healthy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="845" y="530" width="165" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Category → Leaf edges ═══ -->
+        <mxCell id="e-c1-l1a" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat1" target="l1a" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c1-l1b" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat1" target="l1b" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-l1a-l1b" value="optional" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;endArrow=open;endFill=0;fontSize=10;" edge="1" source="l1a" target="l1b" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c2-l2a" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat2" target="l2a" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c2-l2b" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat2" target="l2b" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c2-l2c" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat2" target="l2c" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c5-l5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat5" target="l5" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c3-l3a" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat3" target="l3a" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c3-l3b" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat3" target="l3b" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c3-l3c" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat3" target="l3c" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c4-l4a" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat4" target="l4a" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c4-l4b" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat4" target="l4b" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-c4-l4c" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" source="cat4" target="l4c" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Separator ═══ -->
+        <mxCell id="sep" value="" style="line;strokeWidth=1;fillColor=none;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="30" y="650" width="1100" height="10" as="geometry" />
+        </mxCell>
+
+        <!-- ═══ Quick-reference matrix ═══ -->
+        <mxCell id="matrix-title" value="Quick-Reference: Job Type vs. Cluster Impact" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="670" width="600" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Matrix header row -->
+        <mxCell id="mh0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;" vertex="1" parent="1">
+          <mxGeometry x="30" y="705" width="130" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh1" value="Creates objects" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh2" value="Needs existing" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh3" value="podLatency" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh4" value="Supports churn" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh5" value="Side effects" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="mh6" value="Real duration" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="705" width="120" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- Matrix rows: create, read, patch, delete, kubevirt -->
+        <!-- create -->
+        <mxCell id="mr1-n" value="create" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="740" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-1" value="Yes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-2" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-3" value="Yes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-4" value="Yes (churnConfig)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-5" value="Creates namespaces" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr1-6" value="5 s (3 ns)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="740" width="120" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- read -->
+        <mxCell id="mr2-n" value="read" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="772" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-1" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-2" value="Yes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-3" value="Skipped" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-4" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-5" value="Read-only" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr2-6" value="9 s (3 passes)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="772" width="120" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- patch -->
+        <mxCell id="mr3-n" value="patch" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="804" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-1" value="No (modifies)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-2" value="Yes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-3" value="Yes (for pods)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-4" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-5" value="Modifies objects" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr3-6" value="1 s (3 deploys)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="804" width="120" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- delete -->
+        <mxCell id="mr4-n" value="delete" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="836" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-1" value="No (deletes)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-2" value="Yes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-3" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-4" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-5" value="Removes objects" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr4-6" value="1 s (6 CMs)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="836" width="120" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- kubevirt -->
+        <mxCell id="mr5-n" value="kubevirt" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="868" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-1" value="No (starts/stops)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-2" value="Yes (VMs)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="280" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-3" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-4" value="No" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="520" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-5" value="Powers VMs on/off" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="mr5-6" value="stop: 29 s (×1 VM)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="868" width="120" height="32" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

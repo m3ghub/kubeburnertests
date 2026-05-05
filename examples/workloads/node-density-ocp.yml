@@ -1,0 +1,52 @@
+# Node Density Workload — OCP Validated
+# Creates Deployments + Services across multiple namespaces.
+# Validated on OCP 4.18.20 / Kubernetes v1.31.10, 3 worker nodes.
+#
+# Workload: 10 iterations × (1 Deployment with 5 pods + 1 Service) = 10 Deployments, 10 Services, 50 pods
+#
+# Usage (in-cluster):
+#   oc create configmap kube-burner-config \
+#     --from-file=config.yml=node-density-ocp.yml \
+#     --from-file=deployment.yml=deployment-template-ocp.yml \
+#     --from-file=service.yml=service-template-ocp.yml \
+#     -n burner-test
+#   oc apply -f examples/ocp-job-node-density.yaml
+
+global:
+  gc: true
+  gcMetrics: false
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 120s
+        - conditionType: PodScheduled
+          metric: P99
+          threshold: 30s
+
+jobs:
+  - name: node-density
+    jobType: create
+    jobIterations: 10
+    qps: 20
+    burst: 20
+    namespace: burner-density
+    namespacedIterations: true
+    cleanup: true
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    preLoadImages: true
+    preLoadPeriod: 5m
+    objects:
+      - objectTemplate: deployment.yml
+        replicas: 1
+        inputVars:
+          podReplicas: 5
+          image: registry.k8s.io/pause:3.9
+          cpuRequest: "10m"
+          memRequest: "16Mi"
+
+      - objectTemplate: service.yml
+        replicas: 1

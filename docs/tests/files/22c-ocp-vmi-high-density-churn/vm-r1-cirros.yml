@@ -1,0 +1,38 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r1-cirros-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test22c-churn
+    round: r01
+    os: cirros
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: test22c-churn
+        round: r01
+        os: cirros
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest

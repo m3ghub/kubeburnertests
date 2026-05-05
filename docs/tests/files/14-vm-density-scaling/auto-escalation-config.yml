@@ -1,0 +1,206 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # ROUND 1: 2 VMs — Baseline
+  # Confirms VMs can boot on this cluster; always expected to pass
+  # CirrOS 128Mi — P99 target < 30s; delete and verify clean slate
+  # ============================================================
+  - name: round-01-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 2
+  - name: round-01-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-01-create
+
+  # ============================================================
+  # ROUND 2: 5 VMs — Comfortable
+  # Scheduler and virt-controller handling routine concurrency
+  # Still well within headroom; dashboards quiet; P99 target < 45s
+  # ============================================================
+  - name: round-02-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 5
+  - name: round-02-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-02-create
+
+  # ============================================================
+  # ROUND 3: 10 VMs — Starting to see the cluster work
+  # First round where memory and CPU graphs begin to move visibly
+  # Watch Tab 3 (Observe) — you should see a clear step on the chart
+  # ============================================================
+  - name: round-03-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 10
+  - name: round-03-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-03-create
+
+  # ============================================================
+  # ROUND 4: 25 VMs — Moderate pressure
+  # Dashboards start moving clearly; node RAM utilisation climbs
+  # Good demo point: pause here to show Observe tab to audience
+  # ============================================================
+  - name: round-04-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 25
+  - name: round-04-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-04-create
+
+  # ============================================================
+  # ROUND 5: 50 VMs — Heavy load
+  # Nodes will show significant memory utilisation (~6.4Gi for CirrOS)
+  # virt-controller RSS will be elevated; P99 boot time increases
+  # ============================================================
+  - name: round-05-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 50
+  - name: round-05-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-05-create
+
+  # ============================================================
+  # ROUND 6: 100 VMs — Near-limit for most 3-node clusters
+  # Strong customer demo point: "100 VMs on 3 nodes, all Running"
+  # If any VMs stay in Scheduling, you are approaching the ceiling
+  # ============================================================
+  - name: round-06-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 100
+  - name: round-06-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-06-create
+
+  # ============================================================
+  # ROUND 7: 200 VMs — High density territory
+  # Expect elevated P99 boot times; nodes at 80%+ RAM utilisation
+  # If virt-controller pod restarts, stop here — hard ceiling hit
+  # ============================================================
+  - name: round-07-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 200
+  - name: round-07-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-07-create
+
+  # ============================================================
+  # ROUND 8: 500 VMs — Ceiling discovery
+  # This round is intentionally beyond most clusters' limits
+  # A timeout here documents your ceiling; that IS the result
+  # Record the last clean round count as your reliable maximum
+  # ============================================================
+  - name: round-08-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 500
+  - name: round-08-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-08-create

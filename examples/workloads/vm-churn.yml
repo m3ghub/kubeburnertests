@@ -1,0 +1,33 @@
+global:
+  gc: true
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 300s
+
+jobs:
+  - name: vm-churn
+    jobType: create
+    namespace: burner-churn
+    namespacedIterations: true
+    iterationsPerNamespace: 4
+    jobIterations: 2              # 2 namespaces × 4 VMs = 8 total
+    qps: 5
+    burst: 5
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-churn-template.yml
+        replicas: 4
+        wait: false
+        inputVars:
+          memory: 128Mi
+    churnConfig:
+      percent: 25
+      duration: 20m
+      delay: 30s
+      deleteDelay: 5s
+      mode: namespaces

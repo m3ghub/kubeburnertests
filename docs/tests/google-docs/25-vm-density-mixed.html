@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Test 25: Mixed VM Fleet Density — 70% Windows / 30% RHEL</title>
+<style>
+body { font-family: 'Google Sans', Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #202124; line-height: 1.6; }
+h1 { color: #d93025; border-bottom: 3px solid #d93025; padding-bottom: 12px; }
+h2 { color: #1a73e8; margin-top: 32px; }
+h3 { color: #188038; margin-top: 24px; }
+blockquote { background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+code { background: #f1f3f4; padding: 2px 6px; border-radius: 3px; font-family: 'Roboto Mono', monospace; font-size: 0.9em; }
+pre { background: #202124; color: #e8eaed; padding: 16px; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; color: #e8eaed; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+th { background: #1a73e8; color: white; padding: 10px 14px; text-align: left; }
+td { padding: 10px 14px; border-bottom: 1px solid #e0e0e0; }
+tr:nth-child(even) { background: #f8f9fa; }
+.badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 600; margin: 2px; }
+</style>
+</head>
+<body>
+<h1>Test 25: Mixed VM Fleet Density — 70% Windows / 30% RHEL</h1>
+
+<p>
+<span class="badge">⭐⭐⭐⭐⭐ Expert</span>
+<span class="badge">⏱ 40–90 minutes</span>
+<span class="badge">🔀 Mixed Fleet</span>
+<span class="badge">OpenShift Virtualization required</span>
+</p>
+
+<blockquote>
+<strong>What it does:</strong> Creates a mixed fleet of Windows Server 2022 (70%) and RHEL 9 (30%) VMs simultaneously — the most realistic enterprise environment simulation available<br>
+<strong>Why this is the most powerful demo:</strong> "This is your fleet. Both operating systems. On one platform. This is your migration day."
+</blockquote>
+
+<h2>Fleet size calculator</h2>
+<table>
+<tr><th>Total VMs</th><th>Windows (70%)</th><th>RHEL (30%)</th><th>RAM needed</th></tr>
+<tr><td>5</td><td>3</td><td>2</td><td>16 Gi</td></tr>
+<tr><td>10</td><td>7</td><td>3</td><td>34 Gi</td></tr>
+<tr><td>20</td><td>14</td><td>6</td><td>68 Gi</td></tr>
+<tr><td>30</td><td>21</td><td>9</td><td>102 Gi</td></tr>
+</table>
+
+<h2>Before you start — open these browser tabs</h2>
+<table>
+<tr><th>Tab</th><th>Where</th><th>What you watch</th></tr>
+<tr><td>Tab 1</td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td>Tab 2</td><td>Virtualization → VirtualMachines</td><td>Mixed fleet — Windows and RHEL side by side</td></tr>
+<tr><td>Tab 3</td><td>Observe → Metrics</td><td>kubevirt_vmi_phase_count{phase="Running"}</td></tr>
+<tr><td>Tab 4</td><td>Observe → Dashboards → KubeVirt / Top Consumers</td><td>Memory distribution across nodes</td></tr>
+</table>
+
+<h2>Step-by-step guide</h2>
+
+<h3>Step 1 — Set parameters</h3>
+<pre><code>TOTAL_VMS=10
+WINDOWS_COUNT=$(( TOTAL_VMS * 7 / 10 ))
+RHEL_COUNT=$(( TOTAL_VMS - WINDOWS_COUNT ))
+echo "Windows: ${WINDOWS_COUNT}  RHEL: ${RHEL_COUNT}"
+UUID="mixed-fleet-$(date +%s)"</code></pre>
+
+<h3>Step 2 — Create project and RBAC</h3>
+<pre><code>oc new-project burner-mixed-fleet
+oc create serviceaccount kube-burner -n burner-mixed-fleet</code></pre>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, configmaps, secrets, nodes, events, serviceaccounts, persistentvolumeclaims]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-mixed-fleet
+EOF</code></pre>
+
+<h3>Step 3 — Write config file</h3>
+<pre><code>cat &gt; /tmp/mixed-fleet-config.yml &lt;&lt; EOF
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  - name: create-windows-vms
+    namespace: burner-mixed-fleet
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: /config/windows-vm-template.yml
+        replicas: ${WINDOWS_COUNT}
+
+  - name: create-rhel-vms
+    namespace: burner-mixed-fleet
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: /config/rhel-vm-template.yml
+        replicas: ${RHEL_COUNT}
+
+  - name: delete-all-vms
+    namespace: burner-mixed-fleet
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector: {app: mixed-fleet}
+EOF</code></pre>
+
+<h3>Step 4 — Write VM templates</h3>
+<p>Write Windows template to <code>/tmp/windows-vm-template.yml</code> and RHEL template to <code>/tmp/rhel-vm-template.yml</code>.</p>
+<p>See the full markdown guide at <code>docs/tests/markdown/25-vm-density-mixed.md</code> for the complete template YAML.</p>
+
+<h3>Step 5 — Create ConfigMap</h3>
+<pre><code>oc create configmap mixed-fleet-config \
+  --from-file=config.yml=/tmp/mixed-fleet-config.yml \
+  --from-file=windows-vm-template.yml=/tmp/windows-vm-template.yml \
+  --from-file=rhel-vm-template.yml=/tmp/rhel-vm-template.yml \
+  -n burner-mixed-fleet</code></pre>
+
+<h3>Step 6 — Launch Job and stream logs</h3>
+<pre><code>oc get pod -n burner-mixed-fleet -w
+oc logs -f job/kb-mixed-fleet -n burner-mixed-fleet</code></pre>
+
+<h3>Step 7 — Demo narrative</h3>
+<blockquote>
+When RHEL VMs boot first: "See how the RHEL VMs are already running? 90 seconds — that's your Linux workloads, already live. The Windows VMs are still coming up — that's normal. OpenShift isn't adding overhead."<br><br>
+When Windows VMs reach Running: "There's your first Windows VM. Not on VMware. Not on bare metal. On Kubernetes. Managed by the same platform as your containers, with the same RBAC, same monitoring."
+</blockquote>
+
+<h3>Step 8 — Clean up</h3>
+<pre><code>oc delete job kb-mixed-fleet -n burner-mixed-fleet 2&gt;/dev/null || true
+oc delete vm -A -l app=mixed-fleet 2&gt;/dev/null || true
+sleep 60
+oc delete project burner-mixed-fleet
+oc delete clusterrole kube-burner 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</code></pre>
+
+<h2>Troubleshooting</h2>
+<table>
+<tr><th>Problem</th><th>Fix</th></tr>
+<tr><td>win2k22 DataVolume not found</td><td>Complete Test 24 Pre-flight to import the Windows image</td></tr>
+<tr><td>RHEL ImagePullBackOff</td><td>quay.io/containerdisks/rhel9:9.0 unreachable — check pull secrets</td></tr>
+<tr><td>Windows stuck in Provisioning</td><td>CDI still cloning — check oc get datavolume -n burner-mixed-fleet</td></tr>
+<tr><td>serviceaccount "kube-burner" not found</td><td>Re-run Step 2 separately</td></tr>
+<tr><td>Only RHEL VMs appear</td><td>Windows count calculated as 0 — recheck TOTAL_VMS value</td></tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,44 @@
+global:
+  gc: true
+  measurements:
+    - name: podLatency
+      thresholds:
+        - conditionType: Ready
+          metric: P99
+          threshold: 300s    # VMs take longer than containers
+
+jobs:
+  # Phase 1: Create VMs in stopped state
+  - name: create-vms
+    jobType: create
+    namespace: burner-density-scale
+    namespacedIterations: false
+    jobIterations: 1
+    qps: 10
+    burst: 10
+    waitWhenFinished: false
+    objects:
+      - objectTemplate: vm-scale-template.yml
+        replicas: 2           # Override with --set jobs.0.objects.0.replicas=N
+        wait: false
+        inputVars:
+          memory: 128Mi
+
+  # Phase 2: Start all VMs in parallel, measure boot time
+  - name: start-vms
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 30s
+    objects:
+      - kubeVirtOp: start
+        labelSelector: {kube-burner.io/job: create-vms}
+
+  # Phase 3: Stop all VMs cleanly
+  - name: stop-vms
+    jobType: kubevirt
+    executionMode: parallel
+    objects:
+      - kubeVirtOp: stop
+        labelSelector: {kube-burner.io/job: create-vms}
+        inputVars:
+          force: false

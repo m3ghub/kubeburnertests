@@ -1,0 +1,469 @@
+# Test 16: VM Pause/Unpause Storm — Freezing and Thawing Virtual Machines at Scale
+
+> **Difficulty:** ⭐⭐⭐ Advanced  
+> **Time to run:** ~15 minutes  
+> **What it does:** Creates running VMs, then pauses and unpauses all of them simultaneously — testing QEMU state handling, virt-handler response time, and control plane stability  
+> **Requires:** OpenShift Virtualization (KubeVirt) installed  
+> **No local install needed:** kube-burner and the pause/unpause operations run inside the cluster as Jobs
+
+> **⚡ Pre-flight required:** Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see **[00-preflight.md](00-preflight.md)**.
+
+---
+
+## What is this test? ❄️▶️🖥️
+
+Imagine hitting the pause button on 8 games simultaneously, then pressing play on all of them at once — while measuring how long each one takes to freeze and resume.
+
+That is what this test does to VMs.
+
+**Pausing** a VM does not shut it down. KubeVirt tells the underlying QEMU process to:
+1. **Save CPU state** — registers, instruction pointer, all in-flight operations frozen
+2. **Freeze all I/O** — writes are queued but not executed
+3. **Minimise the memory balloon** — RAM footprint is reduced
+
+**Unpausing** reverses all of this instantly — the VM resumes exactly where it left off.
+
+This is used in production to temporarily free up CPU/memory on overloaded nodes, prepare VMs for snapshots, or debug a VM mid-operation without killing it.
+
+---
+
+## What does it measure?
+
+| Metric | What it means |
+|---|---|
+| **Pause latency** | Time from pause command to VMI status = Paused |
+| **Unpause latency** | Time from unpause command to VMI status = Running |
+| **virt-handler response time** | How fast the per-node agent processes concurrent commands |
+| **Cycle consistency** | Whether cycle 2 is as fast as cycle 1 (degradation check) |
+
+---
+
+## How this test works
+
+This test runs as **two Jobs in sequence**:
+
+```
+Job 1 — kube-burner (create)
+  └─► Creates 8 VMs with running: true
+  └─► Waits for all VMIs to reach Running state
+
+Job 2 — pause-ops (shell script)
+  └─► Cycle 1: Pauses all 8 VMs in parallel → holds 15s → unpauses all in parallel
+  └─► Cycle 2: Pauses all 8 VMs again → holds 10s → unpauses again
+  └─► Prints timing for each operation
+  └─► Deletes all VMs
+```
+
+The pause/unpause operations use the KubeVirt subresource REST API directly — the same API that `virtctl pause` calls under the hood.
+
+---
+
+## Before you start — open these browser tabs
+
+| Tab | Where | What you watch |
+|---|---|---|
+| **Tab 1** | Console (already open) | Web terminal |
+| **Tab 2** | Virtualization → VirtualMachines | VMs switching between Running ↔ Paused |
+| **Tab 3** | Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers | CPU spike during pause storms |
+
+---
+
+## Pre-flight checklist
+
+- [ ] Logged into the OpenShift web console
+- [ ] OpenShift Virtualization is installed (`oc get hyperconverged -A` returns a result)
+- [ ] Cluster-admin permissions
+- [ ] Test 09 has run successfully (confirms VMs can boot on this cluster)
+
+---
+
+## Step-by-step guide
+
+---
+
+### Step 1 — Open the web terminal
+
+Click the **`>_` icon** in the top-right of the console toolbar. Confirm it works:
+
+```bash
+oc whoami
+```
+
+---
+
+### Step 2 — Create the project and RBAC
+
+```bash
+oc new-project burner-pause
+```
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-burner
+  namespace: burner-pause
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner-virt
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, configmaps, secrets, nodes, events, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [subresources.kubevirt.io]
+    resources:
+      - virtualmachines/start
+      - virtualmachines/stop
+      - virtualmachines/pause
+      - virtualmachines/unpause
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-virt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner-virt
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-pause
+EOF
+```
+
+Expected output:
+```
+serviceaccount/kube-burner created
+clusterrole.rbac.authorization.k8s.io/kube-burner-virt created
+clusterrolebinding.rbac.authorization.k8s.io/kube-burner-virt created
+```
+
+---
+
+### Step 3 — Create the config files
+
+```bash
+cat > /tmp/vm-pause-config.yml << 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  - name: create-vms
+    namespace: burner-pause
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 5
+    burst: 5
+    waitWhenFinished: true
+    maxWaitTimeout: 5m
+    objects:
+      - objectTemplate: vm-pause-template.yml
+        replicas: 8
+EOF
+
+cat > /tmp/vm-pause-template.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: pause-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: burner-pause
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: burner-pause
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+EOF
+```
+
+---
+
+### Step 4 — Package into a ConfigMap
+
+```bash
+oc create configmap vm-pause-config \
+  --from-file=config.yml=/tmp/vm-pause-config.yml \
+  --from-file=vm-pause-template.yml=/tmp/vm-pause-template.yml \
+  -n burner-pause
+```
+
+Expected output:
+```
+configmap/vm-pause-config created
+```
+
+---
+
+### Step 5 — Switch to Tab 2
+
+Go to **Virtualization → VirtualMachines**, filter namespace to `burner-pause`. Keep it visible — you will watch VMs appear and then flip between `Running` and `Paused` in real time.
+
+---
+
+### Step 6 — Launch Job 1: Create the VMs
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-create-pause-vms
+  namespace: burner-pause
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=pause-storm-001]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: vm-pause-config
+        - name: workdir
+          emptyDir: {}
+EOF
+```
+
+Wait for the pod to start, then stream the logs:
+
+```bash
+oc logs -f job/kb-create-pause-vms -n burner-pause
+```
+
+Wait until you see all 8 VMs showing `Running` in Tab 2 before moving to Step 7.
+
+---
+
+### Step 7 — Launch Job 2: Pause/Unpause storm
+
+This Job calls the KubeVirt subresource API directly — the same endpoint `virtctl pause` uses — and runs two full pause/unpause cycles with timing output.
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-pause-ops
+  namespace: burner-pause
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      containers:
+        - name: pause-ops
+          image: quay.io/openshift/origin-cli:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              NS=burner-pause
+              LABEL="app=burner-pause"
+              API=https://kubernetes.default.svc
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+              pause_all() {
+                echo ">>> Pausing all VMs..."
+                START=$(date +%s%N)
+                for vm in $(oc get vm -n $NS -l $LABEL -o jsonpath='{.items[*].metadata.name}'); do
+                  curl -s -X PUT \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Content-Type: application/json" \
+                    --cacert $CACERT \
+                    "$API/apis/subresources.kubevirt.io/v1/namespaces/$NS/virtualmachines/$vm/pause" &
+                done
+                wait
+                END=$(date +%s%N)
+                echo "Pause complete — $((($END - $START) / 1000000))ms"
+              }
+
+              unpause_all() {
+                echo ">>> Unpausing all VMs..."
+                START=$(date +%s%N)
+                for vm in $(oc get vm -n $NS -l $LABEL -o jsonpath='{.items[*].metadata.name}'); do
+                  curl -s -X PUT \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Content-Type: application/json" \
+                    --cacert $CACERT \
+                    "$API/apis/subresources.kubevirt.io/v1/namespaces/$NS/virtualmachines/$vm/unpause" &
+                done
+                wait
+                END=$(date +%s%N)
+                echo "Unpause complete — $((($END - $START) / 1000000))ms"
+              }
+
+              echo "=============================="
+              echo " VM Pause/Unpause Storm"
+              echo " VMs: $(oc get vm -n $NS -l $LABEL --no-headers | wc -l)"
+              echo "=============================="
+
+              echo ""
+              echo "--- Cycle 1 ---"
+              pause_all
+              echo "Holding paused state for 15s..."
+              sleep 15
+              unpause_all
+              echo "Waiting 30s for VMs to stabilise..."
+              sleep 30
+
+              echo ""
+              echo "--- Cycle 2 ---"
+              pause_all
+              echo "Holding paused state for 10s..."
+              sleep 10
+              unpause_all
+              echo "Waiting 20s for VMs to stabilise..."
+              sleep 20
+
+              echo ""
+              echo "--- Cleaning up VMs ---"
+              oc delete vm -l $LABEL -n $NS
+              echo "Done."
+EOF
+```
+
+---
+
+### Step 8 — Watch the pause storm (two places at once)
+
+**Tab 2 — Virtualization → VirtualMachines:**  
+Watch all 8 VMs flip from `Running` → `Paused` simultaneously, hold, then flip back to `Running`. Then repeat for cycle 2.
+
+**Stream the logs in the terminal:**
+
+```bash
+oc logs -f job/kb-pause-ops -n burner-pause
+```
+
+You will see timing output like:
+
+```
+==============================
+ VM Pause/Unpause Storm
+ VMs: 8
+==============================
+
+--- Cycle 1 ---
+>>> Pausing all VMs...
+Pause complete — 843ms
+Holding paused state for 15s...
+>>> Unpausing all VMs...
+Unpause complete — 612ms
+Waiting 30s for VMs to stabilise...
+
+--- Cycle 2 ---
+>>> Pausing all VMs...
+Pause complete — 798ms
+...
+```
+
+**What to say to a customer:** *"Watch the dashboard — in under a second, 8 virtual machines simultaneously froze their CPU state and freed their memory. This is how OpenShift Virtualization handles VM density management at scale."*
+
+---
+
+### Step 9 — Show the dashboard
+
+**Tab 3 — Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers**
+
+Switch to **CPU**. You will see two spikes — one per pause cycle — as QEMU saves CPU state across all VMs simultaneously. After each unpause the CPU returns to baseline immediately.
+
+---
+
+### Step 10 — Clean up
+
+```bash
+oc delete job kb-create-pause-vms -n burner-pause 2>/dev/null || true
+oc delete job kb-pause-ops -n burner-pause 2>/dev/null || true
+oc delete configmap vm-pause-config -n burner-pause 2>/dev/null || true
+oc delete project burner-pause
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt
+```
+
+---
+
+## Push harder
+
+To increase the stress, change `replicas: 8` to a higher number in Step 3 before running:
+
+| Replicas | What it tests |
+|---|---|
+| 8 | Baseline — default, fast to run |
+| 20 | Noticeable CPU spike on dashboards |
+| 50 | Heavy virt-handler pressure — good customer demo |
+| 100 | Near-limit for most clusters |
+
+**Signs the virt-handler is saturated:**
+- Pause operations taking > 5 seconds per VM
+- VMIs stuck in `Pausing` state
+- `virt-handler` pod CPU at 100% on worker nodes
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| VMs stuck in `Pausing` | virt-handler overloaded — reduce `replicas` |
+| `403 Forbidden` on pause API call | RBAC missing `virtualmachines/pause` — re-run Step 2 |
+| Job 2 pod errors `oc: command not found` | Image pull issue — confirm cluster can reach `quay.io` |
+| Cycle 2 noticeably slower than cycle 1 | Normal — QEMU cache reload after unpause adds latency |
+| VMs never reach `Running` before pause job starts | Wait longer after Job 1 logs complete before running Job 2 |
+
+---
+
+*Next test in the virtualisation series: [Test 13 — VM Live Migration](13-vm-live-migration.md)*

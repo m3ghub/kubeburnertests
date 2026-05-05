@@ -1,0 +1,133 @@
+================================================================================
+                             KUBE-BURNER TEST GUIDE
+                        19-OCP-CLUSTER-DENSITY-V2
+================================================================================
+  Kube-Burner v2.6.1 | Product: OpenShift / Kubernetes
+  Source: github.com/kube-burner/kube-burner
+================================================================================
+
+
+================================================================================
+        TEST 19: OCP CLUSTER DENSITY V2 -- FULL-STACK MULTI-TENANT SCALE
+================================================================================
+
+  NOTE: Difficulty: ⭐⭐⭐⭐ Advanced
+  NOTE: Time to run: ~20-30 minutes
+  NOTE: What it does: Creates N namespaces each with Deployment, Service,
+        Route, ConfigMaps, Secrets, and NetworkPolicy simultaneously
+  NOTE: Requires: Multi-node OpenShift cluster
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  WHAT IS THIS TEST? 🏙️
+--------------------------------------------------------------------------------
+
+Imagine spinning up a brand new city from scratch -- but not just empty
+buildings. Every block has a working storefront (Deployment), a road name
+(Service), a postal address accessible from outside (Route), a security fence
+(NetworkPolicy), and a key box with secrets (ConfigMap + Secret).
+
+Now do that for 500 blocks simultaneously.
+
+Cluster Density v2 is the most realistic OpenShift workload test there is.
+It doesn't just measure whether the API server can take writes -- it measures
+whether the whole stack can handle real enterprise tenants being provisioned
+at scale.
+
+Demo quote: "This is what 500 namespaces of production workloads hitting your
+cluster at the same time looks like -- and your cluster handled it."
+
+--------------------------------------------------------------------------------
+  WHAT IT MEASURES
+--------------------------------------------------------------------------------
+
+  Metric                          Description
+  -------                         -----------
+  Pod creation latency P50/P95/P99  Time from API call to pod Running
+  Route admission latency           Time for OCP router to program the route
+  API server request rate           Peak requests/second all object types
+  etcd DB size growth               Bytes added per namespace created
+  Namespace creation throughput     Namespaces created per second
+
+--------------------------------------------------------------------------------
+  BROWSER TABS TO OPEN
+--------------------------------------------------------------------------------
+
+  Tab 1: Console (web terminal)
+  Tab 2: Home -> Projects (project count climbing)
+  Tab 3: Networking -> Routes (routes appearing, Accepted status)
+  Tab 4: Observe -> Metrics  (rate(apiserver_request_total[1m]))
+
+--------------------------------------------------------------------------------
+  STEP-BY-STEP GUIDE
+--------------------------------------------------------------------------------
+
+STEP 1 -- OPEN WEB TERMINAL AND VERIFY
+    oc whoami
+    oc get nodes --no-headers | awk '{print $1, $2}'
+
+STEP 2 -- CHOOSE ITERATION COUNT
+  Cluster size     Starter    Medium    Heavy
+  3-worker OCP     50 ns      100 ns    200 ns
+  6+ workers       200 ns     500 ns    1000 ns
+
+STEP 3 -- CREATE PROJECT AND RBAC
+    oc new-project burner-cluster-density
+    oc create serviceaccount kube-burner -n burner-cluster-density
+  Apply ClusterRole (includes route.openshift.io and networking.k8s.io)
+  and ClusterRoleBinding (see markdown guide).
+    oc get serviceaccount kube-burner -n burner-cluster-density
+    oc get clusterrole kube-burner
+    oc get clusterrolebinding kube-burner
+
+STEP 4 -- WRITE CONFIG AND TEMPLATES
+    ITERATIONS=50
+    UUID="cluster-density-$(date +%s)"
+  Write: config.yml, deployment-template.yml, service-template.yml,
+         route-template.yml, networkpolicy-template.yml
+
+STEP 5 -- CREATE CONFIGMAP
+    oc create configmap cluster-density-config \
+      --from-file=config.yml=/tmp/cluster-density-config.yml \
+      --from-file=deployment-template.yml=/tmp/deployment-template.yml \
+      --from-file=service-template.yml=/tmp/service-template.yml \
+      --from-file=route-template.yml=/tmp/route-template.yml \
+      --from-file=networkpolicy-template.yml=/tmp/networkpolicy-template.yml \
+      -n burner-cluster-density
+
+STEP 6 -- LAUNCH JOB AND STREAM LOGS
+  Apply the Job YAML (see markdown guide).
+    oc get pod -n burner-cluster-density -w
+    oc logs -f job/kb-cluster-density -n burner-cluster-density
+
+  WHAT TO SAY: "Each project you see appearing is a complete application
+  namespace -- Deployment, Service, Route, ConfigMaps, Secrets, and
+  NetworkPolicy. We're creating 50 of them simultaneously."
+
+STEP 7 -- READ RESULTS
+    INFO podLatency:
+    INFO   P50:  3.1s
+    INFO   P99:  12.8s
+
+STEP 8 -- CLEAN UP
+    oc delete job kb-cluster-density -n burner-cluster-density 2>/dev/null || true
+    for ns in $(oc get projects --no-headers -o custom-columns=NAME:.metadata.name \
+      | grep "^cluster-density"); do oc delete project $ns; done
+    oc delete project burner-cluster-density
+    oc delete clusterrole kube-burner 2>/dev/null || true
+    oc delete clusterrolebinding kube-burner 2>/dev/null || true
+    oc get projects | grep cluster-density
+  Should return nothing.
+
+--------------------------------------------------------------------------------
+  TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+  PROBLEM                         FIX
+  serviceaccount not found        Re-run Step 3 -- create SA separately
+  Routes not appearing            Check oc get ingresscontroller -A
+  cannot create resource routes   Add route.openshift.io to ClusterRole
+  P99 > 20s                       Reduce ITERATIONS -- etcd limit reached
+
+================================================================================

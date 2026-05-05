@@ -1,0 +1,424 @@
+# Test 20: OCP VMI Density — How Many VMs Can Boot at Once?
+
+> **Difficulty:** ⭐⭐⭐⭐ Advanced  
+> **Time to run:** ~15–20 minutes  
+> **What it does:** Creates N VirtualMachineInstances per worker node simultaneously and measures KubeVirt control-plane boot latency  
+> **Requires:** OpenShift Virtualization 4.x, multi-node cluster
+
+> **⚡ Pre-flight required:** Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see **[00-preflight.md](00-preflight.md)**.
+
+---
+
+## What is this test? 🖥️🖥️🖥️
+
+Imagine every seat in a packed stadium is a virtual machine — and you want all of them occupied and running at exactly the same time. The question isn't whether *one* VM can start. The question is whether the control plane can handle *all of them starting simultaneously* without falling over.
+
+**This is the test that separates a real virtualisation platform from one that only works at small scale.**
+
+`vmi-density` is the benchmark Red Hat uses to size and validate OpenShift Virtualization for enterprise customers. When a customer asks "can I run 200 VMs per node?" — this is the test that answers it with real numbers, not marketing claims.
+
+When you demo this: *"Watch the screen — in the next 60 seconds you'll see N virtual machines boot simultaneously on your cluster. That's the same workload as replacing your entire VMware farm with OpenShift Virtualization."*
+
+---
+
+## What this test does
+
+Creates a configurable number of VirtualMachines (with `running: true` so they boot immediately) across your worker nodes — all at once — and measures the KubeVirt control-plane's ability to bring them all to `Running` state.
+
+It validates:
+
+- `virt-controller`: can it process N concurrent VM creation requests?
+- `virt-handler`: can it reconcile N VMIs on each node simultaneously?
+- `virt-api`: can it serve the admission webhook load without timeouts?
+- etcd: can it absorb the write burst from all VMI objects + status updates?
+- Worker nodes: do they have enough memory to host N VMs?
+
+---
+
+## What it measures
+
+| Metric | Description |
+|---|---|
+| VMI ready latency (P50/P95/P99) | Time from VMI creation to Running phase |
+| virt-controller queue depth | How many VMIs are awaiting reconciliation |
+| virt-handler memory usage | RSS growth per additional VMI |
+| API server watch event rate | Events/second for VMI status updates |
+| etcd write throughput | Writes/second during density creation |
+| Node memory pressure | OOM risk from guest memory |
+
+---
+
+## How it works
+
+```
+  YOU                        CLUSTER
+   │
+   │  oc apply -f job.yaml
+   ▼
+┌──────────────────────────────────────────────────────────┐
+│  kube-burner Job (quay.io/kube-burner/kube-burner)       │
+│                                                          │
+│  Creates N VMs (running: true) → VMIs boot immediately   │
+│                                                          │
+│  VM State Machine:                                       │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  API Create VM                                     │  │
+│  │       │                                            │  │
+│  │       ▼                                            │  │
+│  │  Scheduling ──► virt-controller picks up           │  │
+│  │       │                                            │  │
+│  │       ▼                                            │  │
+│  │  Scheduled  ──► virt-handler starts launcher pod   │  │
+│  │       │                                            │  │
+│  │       ▼                                            │  │
+│  │   Running   ──► VMI booted, guest OS up            │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  Measures: vmiLatency P50/P95/P99                        │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Before you start — open these browser tabs
+
+| Tab | Where | What you watch |
+|---|---|---|
+| **Tab 1** | Console (already open) | Web terminal |
+| **Tab 2** | Virtualization → VirtualMachines | VMs appearing and transitioning to Running |
+| **Tab 3** | Observe → Metrics | `kubevirt_vmi_phase_count{phase="Running"}` |
+| **Tab 4** | Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers | Memory climbing per node |
+
+---
+
+## Pre-flight checklist
+
+- [ ] Logged into the OpenShift web console
+- [ ] OpenShift Virtualization installed: `oc get hyperconverged -A` must return a result
+- [ ] Cluster-admin permissions
+- [ ] At least 2 worker nodes with available memory
+- [ ] Memory check per worker: `oc adm top nodes`
+
+---
+
+## Step-by-step guide
+
+---
+
+### Step 1 — Open the web terminal
+
+Click the **`>_` icon** in the top-right toolbar. Verify:
+
+```bash
+oc whoami
+oc get hyperconverged -A
+oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+```
+
+The hyperconverged query must return a result. Note the worker count.
+
+---
+
+### Step 2 — Choose how many VMs to create
+
+| Cluster size | Starter | Medium | Heavy |
+|---|---|---|---|
+| 2–3 worker nodes | 5 VMs total | 10 VMs total | 20 VMs total |
+| 4–6 worker nodes | 10 VMs total | 25 VMs total | 50 VMs total |
+
+**Rough memory rule:** each VM needs ~512 MiB. If workers have 16 GiB available each, 25 VMs per 3 nodes = ~4 GiB total RAM used.
+
+---
+
+### Step 3 — Create the project and RBAC
+
+```bash
+oc new-project burner-vmi-density
+oc create serviceaccount kube-burner -n burner-vmi-density
+```
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-vmi-density
+EOF
+```
+
+Verify all three exist:
+
+```bash
+oc get serviceaccount kube-burner -n burner-vmi-density
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner
+```
+
+---
+
+### Step 4 — Switch to Tab 2
+
+Go to **Virtualization → VirtualMachines** in the console. Keep this visible. During the test you will see the VM list populate in real time as VMs are created and boot.
+
+---
+
+### Step 5 — Set your parameters and write config
+
+Set the number of VMs you want to create:
+
+```bash
+VM_COUNT=10
+UUID="vmi-density-$(date +%s)"
+```
+
+Write the config file:
+
+```bash
+cat > /tmp/vmi-density-config.yml << EOF
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  - name: create-vms
+    namespace: burner-vmi-density
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: ${VM_COUNT}
+
+  - name: delete-vms
+    namespace: burner-vmi-density
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector: {kube-burner-job: create-vms}
+EOF
+```
+
+Write the VM template:
+
+```bash
+cat > /tmp/vm-template.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: density-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: vmi-density
+    kube-burner-job: create-vms
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: vmi-density
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+EOF
+```
+
+---
+
+### Step 6 — Create the ConfigMap
+
+```bash
+oc create configmap vmi-density-config \
+  --from-file=config.yml=/tmp/vmi-density-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-vmi-density
+
+oc get configmap vmi-density-config -n burner-vmi-density
+```
+
+---
+
+### Step 7 — Launch the Job
+
+```bash
+cat << JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-vmi-density
+  namespace: burner-vmi-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: vmi-density-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML
+```
+
+---
+
+### Step 8 — Wait for the pod and stream logs
+
+```bash
+oc get pod -n burner-vmi-density -w
+```
+
+Wait until `Running`, then:
+
+```bash
+oc logs -f job/kb-vmi-density -n burner-vmi-density
+```
+
+---
+
+### Step 9 — Watch the cluster during the test
+
+**Tab 2 (Virtualization → VirtualMachines):** Watch VMs appear and transition `Scheduling → Scheduled → Running`. This is the most dramatic view for a customer demo.
+
+**Tab 3 (Observe → Metrics):**
+```
+kubevirt_vmi_phase_count{phase="Running"}
+```
+Watch the count climb from 0 to your target.
+
+**Tab 4 (Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers):** Watch memory consumption climbing per node as VMs boot.
+
+**What to say to a customer:** *"Watch the Virtualization screen — each icon that turns green is a VM that just booted. We started all of them at the same time. This is the same workload as migrating your VMware estate to OpenShift — on one cluster, in under 5 minutes."*
+
+---
+
+### Step 10 — Read the results
+
+```
+INFO vmiLatency:
+INFO   P50:  32s
+INFO   P95:  55s
+INFO   P99:  78s
+INFO Finished execution. UUID: vmi-density-...
+```
+
+---
+
+### Step 11 — Clean up
+
+```bash
+oc delete job kb-vmi-density -n burner-vmi-density 2>/dev/null || true
+oc delete configmap vmi-density-config -n burner-vmi-density 2>/dev/null || true
+oc delete project burner-vmi-density
+oc delete clusterrole kube-burner 2>/dev/null || true
+oc delete clusterrolebinding kube-burner 2>/dev/null || true
+```
+
+Verify:
+
+```bash
+oc get projects | grep burner-vmi-density
+oc get vm -A 2>/dev/null
+# Both should return nothing
+```
+
+---
+
+## Push harder — escalation ladder
+
+Rerun with increasing VM counts to find the ceiling:
+
+```bash
+# Round 2: double the count
+VM_COUNT=20  UUID="vmi-density-r2-$(date +%s)"
+# Repeat steps 5–10 (oc delete configmap first, then recreate)
+
+# Round 3
+VM_COUNT=40  UUID="vmi-density-r3-$(date +%s)"
+```
+
+Stop when P99 exceeds 5 minutes or VMs stop reaching Running.
+
+---
+
+## Expected results
+
+| Cluster type | VMs created | Expected P99 boot time |
+|---|---|---|
+| 3 workers (standard) | 10 | 30–60 s |
+| 3 workers (standard) | 25 | 45–90 s |
+| 3 workers (standard) | 50 | 90–180 s |
+| Large cluster (10+ workers) | 25 | 30–60 s |
+
+P99 over 300s indicates a virt-controller or etcd bottleneck.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `no kind VirtualMachine` | OpenShift Virtualization not installed — verify Step 1 |
+| VMs stuck in `Scheduling` | Not enough RAM — reduce `VM_COUNT` |
+| `serviceaccount "kube-burner" not found` | Re-run Step 3 separately |
+| `ImagePullBackOff` on cirros disk | Cluster cannot reach `quay.io` |
+| virt-controller OOMKilled | You found the hard ceiling — reduce `VM_COUNT` |

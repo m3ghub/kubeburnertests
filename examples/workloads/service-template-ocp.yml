@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: node-density
+    kube-burner-job: "{{.JobName}}"
+    iteration: "{{.Iteration}}"
+spec:
+  selector:
+    app: node-density
+    name: app-{{.Iteration}}-{{.Replica}}
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

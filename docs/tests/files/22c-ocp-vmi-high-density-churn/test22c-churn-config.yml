@@ -1,0 +1,464 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # ROUND 1: cirros only — 6 VMs, 1vCPU/512Mi, 3 churn cycles
+  # Same as 22B: containerDisk baseline, warms up the control plane
+  # ============================================================
+  - name: r01-cre-cirros
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-c1-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-cirros
+
+  - name: r01-c1-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-c2-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre
+
+  - name: r01-c2-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-c3-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c2-cre
+
+  - name: r01-c3-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r01
+
+  # ============================================================
+  # ROUND 2: RHEL9 only — 16 VMs, 1vCPU/2Gi, 3 churn cycles
+  # Real OS: 4x the density of 22B — PVC clone pressure begins
+  # ============================================================
+  - name: r02-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c1-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-rhel9
+
+  - name: r02-c1-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c2-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre
+
+  - name: r02-c2-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c3-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c2-cre
+
+  - name: r02-c3-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r02
+
+  # ============================================================
+  # ROUND 3: RHEL9 + Fedora mixed — 20+20=40 VMs, 1vCPU/2Gi, 3 cycles
+  # Mixed OS at scale: CDI must handle 40 concurrent PVC clones
+  # ============================================================
+  - name: r03-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c1-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-rhel9
+
+  - name: r03-c1-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c1-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-fedora
+
+  - name: r03-c1-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c2-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-rhel9
+
+  - name: r03-c2-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c2-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-fedora
+
+  - name: r03-c2-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c3-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-rhel9
+
+  - name: r03-c3-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c3-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-fedora
+
+  - name: r03-c3-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r03
+
+  # ============================================================
+  # ROUND 4: RHEL9 + Fedora heavy — 40+40=80 VMs, 2vCPU/4Gi, 2 cycles
+  # Maximum pressure: 80 VMs total, 320 Gi RAM, 160 vCPU requested
+  # This is the full production-scale wall test
+  # ============================================================
+  - name: r04-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-c1-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-rhel9
+
+  - name: r04-c1-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-c1-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-fedora
+
+  - name: r04-c1-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-c2-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-rhel9
+
+  - name: r04-c2-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-c2-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-fedora
+
+  - name: r04-c2-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: test22c-churn

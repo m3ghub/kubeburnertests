@@ -1,0 +1,374 @@
+# Test 02: Node Density — How Much Can One Computer Handle?
+
+> **Difficulty:** ⭐ Beginner  
+> **Time to run:** ~8 minutes  
+> **What it does:** Creates Deployments (apps) and Services across your nodes to find their maximum comfortable capacity
+
+> **⚡ Pre-flight required:** Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see **[00-preflight.md](00-preflight.md)**.
+
+---
+
+## What is this test? 🖥️
+
+Imagine your cluster is like an apartment building. Each **node** is one floor.  
+Each **Deployment** is a family moving into an apartment.
+
+**Node Density** asks: *How many families can each floor comfortably hold before things start getting crowded?*
+
+It creates many `Deployment` + `Service` pairs — real applications, not just bare pods — and measures how quickly the nodes schedule and run them all.
+
+---
+
+## What does it measure?
+
+| Metric | What it means |
+|---|---|
+| **PodScheduled** | How fast the scheduler assigned each pod to a floor (node) |
+| **ContainersReady** | How fast all containers inside each pod started |
+| **Ready** | How fast each pod was fully ready |
+| **Nodes used** | Which nodes absorbed the most load |
+
+---
+
+## How it works
+
+```
+kube-burner creates this layout per iteration:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │  Namespace: burner-node-density-0                       │
+  │                                                         │
+  │  Deployment-1 ──► Pod 🟢   Service-1 ──► Pod 🟢        │
+  │  Deployment-2 ──► Pod 🟢   Service-2 ──► Pod 🟢        │
+  │  Deployment-3 ──► Pod 🟢   Service-3 ──► Pod 🟢        │
+  │  ...                       ...                          │
+  │  Deployment-N ──► Pod 🟢   Service-N ──► Pod 🟢        │
+  └─────────────────────────────────────────────────────────┘
+
+  Pods are spread across your worker nodes:
+
+  Node 1       Node 2       Node 3
+  ┌──────┐    ┌──────┐    ┌──────┐
+  │ 🟢🟢│    │ 🟢🟢│    │ 🟢🟢│
+  │ 🟢🟢│    │ 🟢🟢│    │ 🟢🟢│
+  │ 🟢🟢│    │ 🟢🟢│    │ 🟢🟢│
+  └──────┘    └──────┘    └──────┘
+```
+
+---
+
+## Before you start ✅
+
+- [ ] kube-burner installed (`kube-burner version`)
+- [ ] Logged in (`oc whoami`)
+- [ ] RBAC applied (`oc get clusterrole kube-burner`)
+- [ ] At least **2 worker nodes** with free CPU/memory
+- [ ] About **10 minutes** of your time
+
+---
+
+## Step-by-step guide
+
+### Step 1 — Create the namespace
+
+> **Do this first — every other step depends on it.**
+
+```bash
+oc new-project burner-node-density
+```
+
+You should see:
+```
+Now using project "burner-node-density" on server "https://api.<your-cluster>:6443"
+```
+
+> **OpenShift only:** Never use `kube-` at the start of the name — it is reserved by the system and will be rejected.
+
+### Step 2 — Set up RBAC
+
+Every test needs a `ServiceAccount`, `ClusterRole`, and `ClusterRoleBinding`. Run all three commands — they are safe to re-run if any already exist.
+
+**2a — Create the ServiceAccount in this namespace:**
+
+```bash
+oc create serviceaccount kube-burner -n burner-node-density \
+  --dry-run=client -o yaml | oc apply -f -
+```
+
+**2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):**
+
+> These are applied inline below — no local file needed. Safe to re-run at any time.
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-node-density
+EOF
+```
+
+**2c — Add this namespace to the ClusterRoleBinding:**
+
+```bash
+oc patch clusterrolebinding kube-burner \
+  --type=json \
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-node-density"}}]' 2>/dev/null || true
+```
+
+> The `|| true` at the end means this command will not fail if the namespace is already listed. It is safe to run every time.
+
+**Verify all three are in place before continuing:**
+
+```bash
+oc get serviceaccount kube-burner -n burner-node-density
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
+```
+
+The last command should include `burner-node-density` in the output.
+
+### Step 3 — Create the workload config files
+
+Create `node-density-config.yml`:
+
+```bash
+cat > /tmp/node-density-config.yml << 'EOF'
+global:
+  gc: true
+  measurements:
+    - name: podLatency
+
+jobs:
+  - name: node-density
+    namespace: burner-node-density
+    jobType: create
+    jobIterations: 1
+    qps: 20
+    burst: 20
+    objects:
+      - objectTemplate: deployment.yml
+        replicas: 10
+      - objectTemplate: service.yml
+        replicas: 10
+    waitWhenFinished: true
+    podWait: true
+    maxWaitTimeout: 8m
+EOF
+```
+
+Create `deployment.yml`:
+
+```bash
+cat > /tmp/deployment.yml << 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burner-dep-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: burner-dep-{{.Iteration}}-{{.Replica}}
+  template:
+    metadata:
+      labels:
+        name: burner-dep-{{.Iteration}}-{{.Replica}}
+        app: kube-burner
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 1m
+              memory: 10Mi
+EOF
+```
+
+Create `service.yml`:
+
+```bash
+cat > /tmp/service.yml << 'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: burner-svc-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner
+spec:
+  selector:
+    name: burner-dep-{{.Iteration}}-{{.Replica}}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+EOF
+```
+
+---
+
+### Step 4 — Package into a ConfigMap
+
+```bash
+oc create configmap node-density-config \
+  --from-file=config.yml=/tmp/node-density-config.yml \
+  --from-file=deployment.yml=/tmp/deployment.yml \
+  --from-file=service.yml=/tmp/service.yml \
+  -n burner-node-density
+```
+
+---
+
+### Step 5 — Run the test!
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-node-density
+  namespace: burner-node-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=node-density-001
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: node-density-config
+        - name: workdir
+          emptyDir: {}
+EOF
+```
+
+---
+
+### Step 6 — Watch the Deployments appear
+
+```bash
+# Watch deployments roll out
+oc get deployments -n burner-node-density -w
+
+# Watch pods land on nodes
+oc get pods -n burner-node-density -o wide -w
+```
+
+The `-o wide` flag shows which node each pod landed on. You should see the pods spread across your worker nodes.
+
+---
+
+### Step 7 — Stream logs and read results
+
+```bash
+oc logs -f job/kb-node-density -n burner-node-density
+```
+
+You will see each deployment being created and then the final latency summary:
+
+```
+time="..." level=info msg="node-density: PodScheduled    99th: 600ms"
+time="..." level=info msg="node-density: ContainersReady 99th: 3000ms"
+time="..." level=info msg="node-density: Ready           99th: 3100ms"
+time="..." level=info msg="Finished execution. UUID: node-density-001"
+```
+
+**Good results on a healthy cluster:**
+- `PodScheduled 99th` under **2 seconds**
+- `Ready 99th` under **10 seconds** for deployments
+
+---
+
+### Step 8 — Check how pods spread across nodes
+
+```bash
+oc get pods -n burner-node-density -o wide \
+  --no-headers | awk '{print $7}' | sort | uniq -c | sort -rn
+```
+
+This shows how many pods landed on each node. A healthy cluster will spread them evenly.
+
+---
+
+### Step 9 — Clean up
+
+```bash
+oc delete job kb-node-density -n burner-node-density
+oc delete configmap node-density-config -n burner-node-density
+oc delete project burner-node-density
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Only one node gets all the pods | Check if other nodes have taints or insufficient resources |
+| Deployments never become `Available` | Check the pod events: `oc describe pod <name>` |
+| `ImagePullBackOff` | The cluster cannot reach `registry.k8s.io` — try a mirrored image |
+| Test is very slow | Reduce `replicas` from 10 to 5 |
+
+---
+
+## Try it yourself — challenge 🏆
+
+1. Increase `replicas` to 25 per node — watch the scheduler work harder
+2. Add `podAntiAffinity` to the deployment to force pods onto different nodes
+3. Check node CPU usage during the test: `oc top nodes`
+
+---
+
+*Next test: [03 — Cluster Density](03-cluster-density.md) — build a whole town of apps across the entire cluster*

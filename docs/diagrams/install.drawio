@@ -1,0 +1,72 @@
+<mxfile host="app.diagrams.net" modified="2026-04-28T00:00:00Z" agent="kube-burner-docs" version="21.0.0" type="device">
+  <diagram id="install-001" name="kube-burner Installation">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="kube-burner Installation Guide — How to Get Started" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="No local binary required for OpenShift — runs as an in-cluster Job using quay.io/kube-burner/kube-burner:v2.6.1" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#5f6368;" vertex="1" parent="1">
+          <mxGeometry x="40" y="54" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 -->
+        <mxCell id="s1" value="Step 1&#xa;Open Web Console&#xa;&gt;_ terminal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 -->
+        <mxCell id="s2" value="Step 2&#xa;oc new-project&#xa;burner-&lt;name&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="120" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 3 -->
+        <mxCell id="s3" value="Step 3&#xa;kubectl create serviceaccount&#xa;kube-burner -n &lt;ns&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="120" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 4 -->
+        <mxCell id="s4" value="Step 4&#xa;kubectl apply ClusterRole&#xa;+ ClusterRoleBinding" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="120" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 5 -->
+        <mxCell id="s5" value="Step 5&#xa;kubectl create configmap&#xa;(config + templates)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="120" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="s5" target="s6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 6 -->
+        <mxCell id="s6" value="Step 6&#xa;kubectl apply Job YAML&#xa;(kube-burner:v2.6.1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="120" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Warning note -->
+        <mxCell id="warn" value="⚠️ Key rule: ALWAYS create ServiceAccount FIRST as a separate command.&#xa;Multi-doc kubectl apply silently fails to create ServiceAccounts.&#xa;Proof: kubectl get serviceaccount kube-burner -n &lt;ns&gt; — must return a result before continuing." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef7e0;strokeColor=#d6b656;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="230" width="700" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Namespace note -->
+        <mxCell id="nsrule" value="📌 Namespace naming: use burner-, perf-, or bench- prefix.&#xa;OCP reserves the kube- prefix — using it returns:&#xa;'Error: cannot request a project starting with kube-'" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="760" y="230" width="780" height="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
