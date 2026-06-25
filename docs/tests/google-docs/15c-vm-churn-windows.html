@@ -1,0 +1,779 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
+<h1>Test 15C: VM Churn — Windows Server Variant</h1>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐⭐ Expert  </blockquote>
+<blockquote><strong>Time to run:</strong> 45–90 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Runs 3 escalating rounds of VM churn using real Windows Server 2022 virtual machines cloned from the OpenShift golden image — the most demanding churn test due to Windows boot times and disk size  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed, Windows Server 2022 DataSource ready (<code>windows2k22</code>)  </blockquote>
+<blockquote><strong>Binary:</strong> <code>kube-burner</code> v2.6.1 — runs as an in-cluster Job, nothing to install locally</blockquote>
+<p></p>
+<blockquote><strong>⚡ Run Test 15 first:</strong> This test builds on Test 15. Complete Test 15 successfully before running 15C.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h2>What is this test?</h2>
+<p></p>
+<p>Windows Server VMs are the hardest type of virtual machine to churn:</p>
+<p></p>
+<li>Each VM needs a <strong>60–100 Gi disk clone</strong> (compared to 30 Gi for RHEL9)</li>
+<li>Windows Server boot takes <strong>3–5 minutes</strong> (compared to 35–45 seconds for RHEL9)</li>
+<li>Windows requires <strong>more CPU and RAM</strong> per VM to boot and idle stably</li>
+<li>The <code>sysprep</code> / <code>cloudbase-init</code> first-boot process adds additional time after the OS kernel starts</li>
+<p></p>
+<p>Test 15C deliberately puts this pressure on your cluster in a continuous create-delete cycle, proving that your storage subsystem, virt-controller, and scheduler can handle the heaviest type of real-world VM workload without degrading.</p>
+<p></p>
+<p>The 3 rounds escalate:</p>
+<p></p>
+<tr><td>Round</td><td>VMs</td><td>vCPU</td><td>RAM each</td><td>Disk</td><td>Churn cycles</td><td>What it stresses</td></tr>
+<tr><td>R01</td><td>2</td><td>2</td><td>4Gi</td><td>60Gi</td><td>2</td><td>Baseline Windows — boot + clone pipeline</td></tr>
+<tr><td>R02</td><td>3</td><td>2</td><td>4Gi</td><td>60Gi</td><td>2</td><td>Parallel clones — storage throughput</td></tr>
+<tr><td>R03</td><td>4</td><td>4</td><td>8Gi</td><td>60Gi</td><td>2</td><td>Heavy Windows fleet — maximum virt pressure</td></tr>
+<p></p>
+<blockquote><strong>Why fewer VMs than RHEL9?</strong> Windows VMs consume significantly more resources per instance. 4 heavy Windows VMs (4vCPU/8Gi each) is equivalent stress to 8+ RHEL9 VMs. Quality over quantity.</blockquote>
+<p></p>
+<p><strong>What this proves:</strong> <em>"We ran real Windows Server 2022 virtual machines through continuous create-and-destroy cycles. Every VM booted the full Windows OS from a cloned disk. The cluster held through three escalating rounds without stuck VMs, without storage timeouts, and without the virt-controller losing control. If you need to run Windows workloads on OpenShift Virtualisation, this cluster is ready."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h2>What it measures</h2>
+<p></p>
+<tr><td>Metric</td><td>What it means</td></tr>
+<tr><td><strong>VMIRunning P99</strong></td><td>Time from VM creation to Running — includes 60Gi disk clone + full Windows boot</td></tr>
+<tr><td><strong>VMReady P99</strong></td><td>Time to full readiness including cloudbase-init completion</td></tr>
+<tr><td><strong>CDI clone duration</strong></td><td>How long each 60Gi DataVolume clone takes — key bottleneck</td></tr>
+<tr><td><strong>virt-controller RSS</strong></td><td>Memory footprint — should stay flat between rounds</td></tr>
+<tr><td><strong>Delete duration</strong></td><td>Time to fully remove Windows VMs and their PVCs</td></tr>
+<tr><td><strong>Stuck VM count</strong></td><td>VMs that never reach Running (should always be zero)</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h2>Before you start — open these browser tabs</h2>
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Terminal — streaming kube-burner logs</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VM status — watch <code>Provisioning</code> → <code>Starting</code> → <code>Running</code></td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Storage → PersistentVolumeClaims</td><td>60Gi PVCs being cloned — filter by <code>burner-test15c</code></td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Metrics</td><td><code>process_resident_memory_bytes{pod=~"virt-controller.*"}</code></td></tr>
+<p></p>
+<hr>
+<p></p>
+<h2>Pre-flight checklist</h2>
+<p></p>
+<li>[ ] Test 15 completed successfully</li>
+<li>[ ] Logged into the OpenShift web console</li>
+<li>[ ] OpenShift Virtualization installed: <code>oc get hyperconverged -A</code> returns a result</li>
+<li>[ ] Cluster-admin permissions</li>
+<li>[ ] Windows Server 2022 DataSource ready:</li>
+<p></p>
+<pre><code>oc get datasource windows2k22 -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p>Must show <code>READY: True</code>. If not, the golden image has not finished importing.</p>
+<p></p>
+<li>[ ] At least 3 worker nodes with ~32 Gi free RAM total (R03 needs 4 × 8Gi)</li>
+<li>[ ] At least 240 Gi free storage (4 VMs × 60 Gi per clone)</li>
+<p></p>
+<blockquote><strong>Storage check:</strong> If your storage class is thin-provisioned (e.g., ODF/Ceph), the 240 Gi is a soft reservation. Run <code>oc get pv --sort-by=.spec.capacity.storage</code> to confirm available capacity before starting.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h2>Step-by-step guide</h2>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 1 — Open the web terminal and verify the cluster</h3>
+<p></p>
+<p>Click the <strong><code>>_</code> icon</strong> in the top-right toolbar of the OpenShift console. Run:</p>
+<p></p>
+<pre><code>oc whoami
+oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+oc get hyperconverged -A
+oc get datasource windows2k22 -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p><code>windows2k22</code> must show <code>READY: True</code> before continuing.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Create the project and RBAC</h3>
+<p></p>
+<pre><code>oc new-project burner-test15c
+oc create serviceaccount kube-burner -n burner-test15c</code></pre>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner-test15c
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes, datasources, dataimportcrons]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-test15c
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner-test15c
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-test15c
+EOF</code></pre>
+<p></p>
+<p>Verify all objects exist:</p>
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-test15c
+oc get clusterrole kube-burner-test15c
+oc get clusterrolebinding kube-burner-test15c</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Write the 3 VM template files</h3>
+<p></p>
+<p>Run each block one at a time — paste the full block including the <code>EOF</code> line.</p>
+<p></p>
+<p><strong>File 1 — <code>vm-r1-win2k22.yml</code> (Round 1: 2 VMs, 2vCPU/4Gi)</strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r1-win2k22.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r1-win2k22-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15c-churn
+    round: r01
+    os: windows2k22
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r1-win2k22-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: windows2k22
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 60Gi
+  template:
+    metadata:
+      labels:
+        app: test15c-churn
+        round: r01
+        os: windows2k22
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: sata
+            - name: sysprep
+              cdrom:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r1-win2k22-disk-{{.Iteration}}-{{.Replica}}
+        - name: sysprep
+          sysprep:
+            configMap:
+              name: windows-sysprep
+EOF</code></pre>
+<p></p>
+<p><strong>File 2 — <code>vm-r2-win2k22.yml</code> (Round 2: 3 VMs, 2vCPU/4Gi)</strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r2-win2k22.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r2-win2k22-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15c-churn
+    round: r02
+    os: windows2k22
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r2-win2k22-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: windows2k22
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 60Gi
+  template:
+    metadata:
+      labels:
+        app: test15c-churn
+        round: r02
+        os: windows2k22
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: sata
+            - name: sysprep
+              cdrom:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r2-win2k22-disk-{{.Iteration}}-{{.Replica}}
+        - name: sysprep
+          sysprep:
+            configMap:
+              name: windows-sysprep
+EOF</code></pre>
+<p></p>
+<p><strong>File 3 — <code>vm-r3-win2k22.yml</code> (Round 3: 4 VMs, 4vCPU/8Gi)</strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r3-win2k22.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r3-win2k22-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15c-churn
+    round: r03
+    os: windows2k22
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r3-win2k22-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: windows2k22
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 60Gi
+  template:
+    metadata:
+      labels:
+        app: test15c-churn
+        round: r03
+        os: windows2k22
+    spec:
+      domain:
+        cpu:
+          cores: 4
+        resources:
+          requests:
+            memory: 8Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: sata
+            - name: sysprep
+              cdrom:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r3-win2k22-disk-{{.Iteration}}-{{.Replica}}
+        - name: sysprep
+          sysprep:
+            configMap:
+              name: windows-sysprep
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Create the sysprep ConfigMap</h3>
+<p></p>
+<p>Windows VMs need a <code>sysprep</code> ConfigMap with an <code>Autounattend.xml</code> file to automate the first-boot configuration. This is a minimal unattended setup:</p>
+<p></p>
+<pre><code>cat &gt; /tmp/Autounattend.xml &lt;&lt; 'EOF'
+&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;unattend xmlns="urn:schemas-microsoft-com:unattend"&gt;
+  &lt;settings pass="specialize"&gt;
+    &lt;component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"&gt;
+      &lt;ComputerName&gt;win-vm&lt;/ComputerName&gt;
+    &lt;/component&gt;
+  &lt;/settings&gt;
+  &lt;settings pass="oobeSystem"&gt;
+    &lt;component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"&gt;
+      &lt;OOBE&gt;
+        &lt;HideEULAPage&gt;true&lt;/HideEULAPage&gt;
+        &lt;HideLocalAccountScreen&gt;true&lt;/HideLocalAccountScreen&gt;
+        &lt;HideOEMRegistrationScreen&gt;true&lt;/HideOEMRegistrationScreen&gt;
+        &lt;HideOnlineAccountScreens&gt;true&lt;/HideOnlineAccountScreens&gt;
+        &lt;HideWirelessSetupInOOBE&gt;true&lt;/HideWirelessSetupInOOBE&gt;
+        &lt;NetworkLocation&gt;Work&lt;/NetworkLocation&gt;
+        &lt;SkipMachineOOBE&gt;true&lt;/SkipMachineOOBE&gt;
+        &lt;SkipUserOOBE&gt;true&lt;/SkipUserOOBE&gt;
+      &lt;/OOBE&gt;
+      &lt;UserAccounts&gt;
+        &lt;AdministratorPassword&gt;
+          &lt;Value&gt;Redhat123!&lt;/Value&gt;
+          &lt;PlainText&gt;true&lt;/PlainText&gt;
+        &lt;/AdministratorPassword&gt;
+      &lt;/UserAccounts&gt;
+    &lt;/component&gt;
+  &lt;/settings&gt;
+&lt;/unattend&gt;
+EOF
+
+oc create configmap windows-sysprep \
+  --from-file=Autounattend.xml=/tmp/Autounattend.xml \
+  -n burner-test15c
+
+oc get configmap windows-sysprep -n burner-test15c</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Write the kube-burner config file</h3>
+<p></p>
+<pre><code>cat &gt; /tmp/test15c-churn-config.yml &lt;&lt; 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # ROUND 1: Windows 2022 — 2 VMs, 2vCPU/4Gi, 2 churn cycles
+  # Baseline: 60Gi disk clone + full Windows boot sequence
+  # Expect 3–5 minutes per VM to reach Running
+  # ============================================================
+  - name: r01-cre-win2k22
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r1-win2k22.yml
+        replicas: 2
+
+  - name: r01-c1-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-win2k22
+
+  - name: r01-c1-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r1-win2k22.yml
+        replicas: 2
+
+  - name: r01-c2-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre
+
+  - name: r01-c2-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r1-win2k22.yml
+        replicas: 2
+
+  - name: r01-final-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r01
+
+  # ============================================================
+  # ROUND 2: Windows 2022 — 3 VMs, 2vCPU/4Gi, 2 churn cycles
+  # Parallel clones: 3 × 60Gi PVCs cloning simultaneously
+  # Watch the Storage tab — this is where storage shows its limits
+  # ============================================================
+  - name: r02-cre-win2k22
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 40m
+    objects:
+      - objectTemplate: vm-r2-win2k22.yml
+        replicas: 3
+
+  - name: r02-c1-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-win2k22
+
+  - name: r02-c1-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 40m
+    objects:
+      - objectTemplate: vm-r2-win2k22.yml
+        replicas: 3
+
+  - name: r02-c2-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre
+
+  - name: r02-c2-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 40m
+    objects:
+      - objectTemplate: vm-r2-win2k22.yml
+        replicas: 3
+
+  - name: r02-final-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r02
+
+  # ============================================================
+  # ROUND 3: Windows 2022 heavy — 4 VMs, 4vCPU/8Gi, 2 cycles
+  # Maximum pressure: 32Gi RAM + 240Gi storage for the full fleet
+  # This is a production-sized Windows VM deployment
+  # ============================================================
+  - name: r03-cre-win2k22
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r3-win2k22.yml
+        replicas: 4
+
+  - name: r03-c1-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-win2k22
+
+  - name: r03-c1-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r3-win2k22.yml
+        replicas: 4
+
+  - name: r03-c2-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre
+
+  - name: r03-c2-cre
+    namespace: burner-test15c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r3-win2k22.yml
+        replicas: 4
+
+  - name: r03-final-del
+    namespace: burner-test15c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: test15c-churn
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Verify all 4 files exist</h3>
+<p></p>
+<pre><code>ls -lh /tmp/test15c-churn-config.yml \
+        /tmp/vm-r1-win2k22.yml \
+        /tmp/vm-r2-win2k22.yml \
+        /tmp/vm-r3-win2k22.yml</code></pre>
+<p></p>
+<p>All 4 must show non-zero file sizes before continuing.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Create the ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap test15c-churn-config \
+  --from-file=config.yml=/tmp/test15c-churn-config.yml \
+  --from-file=vm-r1-win2k22.yml=/tmp/vm-r1-win2k22.yml \
+  --from-file=vm-r2-win2k22.yml=/tmp/vm-r2-win2k22.yml \
+  --from-file=vm-r3-win2k22.yml=/tmp/vm-r3-win2k22.yml \
+  -n burner-test15c
+
+oc get configmap test15c-churn-config -n burner-test15c</code></pre>
+<p></p>
+<p>Expected: <code>configmap/test15c-churn-config created</code> with <code>DATA: 4</code>.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Switch to Tab 2 and Tab 3</h3>
+<p></p>
+<p>Go to <strong>Virtualization → VirtualMachines</strong> — filter by <code>burner-test15c</code>.</p>
+<p></p>
+<p>Go to <strong>Storage → PersistentVolumeClaims</strong> — filter by <code>burner-test15c</code>. This is the key tab for Windows tests — you will see the 60Gi PVCs appear and go through <code>Cloning</code> → <code>Bound</code> before the VMs can boot.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Launch the kube-burner job</h3>
+<p></p>
+<pre><code>UUID="test15c-$(date +%s)"
+echo "UUID: $UUID"
+
+cat &lt;&lt; JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-test15c-churn
+  namespace: burner-test15c
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: test15c-churn-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 10 — Watch the pod start, then stream logs</h3>
+<p></p>
+<pre><code>oc get pod -n burner-test15c -w</code></pre>
+<p></p>
+<p>Wait until the pod shows <code>Running</code>. Then stream logs:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-test15c-churn -n burner-test15c</code></pre>
+<p></p>
+<p>You will see long pauses between job steps — this is normal. Windows VMs take 3–5 minutes to reach Running:</p>
+<p></p>
+<pre><code>INFO Triggering job: r01-cre-win2k22   ← Round 1 starts (2 Windows VMs)
+INFO Job r01-cre-win2k22 took 4m12s    ← Normal — disk clone + OS boot
+INFO Triggering job: r01-c1-del
+INFO Job r01-c1-del took 45s
+INFO Triggering job: r01-c1-cre        ← Churn cycle 1 (second boot is faster — image cached)
+INFO Job r01-c1-cre took 2m38s
+...
+INFO Triggering job: r02-cre-win2k22   ← Round 2 (3 VMs)
+...
+INFO Triggering job: r03-cre-win2k22   ← Round 3 (4 heavy VMs)
+...
+INFO Finished execution with UUID: test15c-...</code></pre>
+<p></p>
+<blockquote><strong>Note:</strong> Second and subsequent boots within the same round are faster because the container image cache on the nodes is warm. First-boot times (including cold CDI clone) are the meaningful benchmark number.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 11 — What to say at each phase</h3>
+<p></p>
+<p><strong>During R01 (2 Windows VMs, first boot):</strong></p>
+<p><em>"This is a real Windows Server 2022 VM cloning its disk and booting for the first time. Watch the PVC tab — you'll see a 60 Gi clone in progress. The 4-minute boot time is the CDI clone plus the full Windows kernel and cloudbase-init sequence."</em></p>
+<p></p>
+<p><strong>During R01 churn cycles:</strong></p>
+<p><em>"Now the second round. The disk clone is much faster this time because the image data is cached on the storage nodes. That's why churn cycle 2 is 2 minutes instead of 4 — production workloads will see these warm-cache times in steady state."</em></p>
+<p></p>
+<p><strong>During R02 (3 VMs simultaneously):</strong></p>
+<p><em>"Three Windows VMs cloning 60 Gi each at the same time. That's 180 Gi of storage I/O happening in parallel. Watch the PVC tab — you'll see all three in <code>Cloning</code> state simultaneously."</em></p>
+<p></p>
+<p><strong>During R03 (4 heavy VMs):</strong></p>
+<p><em>"This is the peak — 4 Windows Server VMs with 4 vCPUs and 8 Gi of RAM each. That's 32 Gi of RAM and 240 Gi of storage committed to Windows workloads alone. If the cluster completes this round without stuck VMs, it is validated for production Windows virtualisation."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 12 — What good looks like</h3>
+<p></p>
+<tr><td>Metric</td><td>Healthy</td><td>Investigate</td></tr>
+<tr><td>R01 VMIRunning P99 (first boot)</td><td>< 6 minutes</td><td>> 15 minutes</td></tr>
+<tr><td>R01 VMIRunning P99 (warm boot)</td><td>< 3 minutes</td><td>> 8 minutes</td></tr>
+<tr><td>R02 VMIRunning P99</td><td>< 8 minutes</td><td>> 20 minutes</td></tr>
+<tr><td>R03 VMIRunning P99</td><td>< 10 minutes</td><td>> 25 minutes</td></tr>
+<tr><td>CDI clone time per 60Gi PVC</td><td>< 3 minutes</td><td>> 10 minutes</td></tr>
+<tr><td>virt-controller RSS peak</td><td>< 400 MiB</td><td>> 800 MiB</td></tr>
+<tr><td>Stuck VMs at end of any round</td><td>0</td><td>Any</td></tr>
+<tr><td>Final VM count after test</td><td>0</td><td>Any remaining</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 13 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-test15c-churn -n burner-test15c 2&gt;/dev/null || true
+oc delete vm -l app=test15c-churn -n burner-test15c 2&gt;/dev/null || true
+oc delete configmap test15c-churn-config windows-sysprep -n burner-test15c 2&gt;/dev/null || true
+oc delete project burner-test15c
+oc delete clusterrole kube-burner-test15c 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner-test15c 2&gt;/dev/null || true</code></pre>
+<p></p>
+<p>Verify clean:</p>
+<p></p>
+<pre><code>oc get projects | grep burner-test15c
+oc get vm -A 2&gt;/dev/null | grep test15c
+oc get pvc -A 2&gt;/dev/null | grep test15c
+# All three should return nothing</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h2>Troubleshooting</h2>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td><code>datasource "windows2k22" not found</code></td><td>Golden image not imported — check <code>oc get datasource -n openshift-virtualization-os-images</code> for the correct name (may be <code>windows2k19</code>)</td></tr>
+<tr><td>VMs stuck in <code>Provisioning</code> for > 15 minutes</td><td>CDI clone stalled — check <code>oc describe datavolume -n burner-test15c</code> for errors</td></tr>
+<tr><td>VMs stuck in <code>Starting</code> for > 10 minutes</td><td>Windows boot hung — check <code>oc get vmi -n burner-test15c</code> and look for <code>Pending</code> VMIs</td></tr>
+<tr><td><code>Insufficient memory</code> scheduling error</td><td>R03 needs 32 Gi free RAM — reduce replicas from 4 to 2</td></tr>
+<tr><td><code>configmap "windows-sysprep" not found</code></td><td>Step 4 was skipped — create the sysprep ConfigMap before creating the VM ConfigMap</td></tr>
+<tr><td>CDI clone takes > 10 minutes per PVC</td><td>Storage throughput bottleneck — check storage class and CDI config for concurrent clone limits</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 2 — always create the SA before applying RBAC</td></tr>
+<tr><td>ConfigMap already exists on rerun</td><td><code>oc delete configmap test15c-churn-config -n burner-test15c</code> then recreate</td></tr>
+<p></p>
+<hr>
+<p></p>
+<p><em>Test 15C is the hardest VM churn test in this suite. Completing it confirms full production readiness for Windows Server workloads on OpenShift Virtualisation.</em></p>
+<p></p>
+</body></html>

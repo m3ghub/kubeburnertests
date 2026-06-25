@@ -1,0 +1,783 @@
+# Test 15B: VM Churn — RHEL9 Real-OS Variant
+
+> **Difficulty:** ⭐⭐⭐⭐ Expert  
+> **Time to run:** 30–60 minutes  
+> **What it does:** Runs 3 escalating rounds of VM churn using real RHEL9 virtual machines cloned from the OpenShift golden image — proving the cluster handles continuous create/delete cycles with full OS boot sequences under sustained pressure  
+> **Requires:** OpenShift Virtualization (KubeVirt) installed, RHEL9 DataSource ready  
+> **Binary:** `kube-burner` v2.6.1 — runs as an in-cluster Job, nothing to install locally
+
+> **⚡ Run Test 15 first:** This test builds on Test 15. Complete Test 15 successfully before running 15B.
+
+---
+
+## What is this test?
+
+Test 15 used lightweight `cirros` VMs that boot in seconds and have no disk clone step. Test 15B replaces those with **real RHEL9 virtual machines** — the same OS your production workloads run on.
+
+Each RHEL9 VM must:
+1. Clone its root disk from the OpenShift golden image (`DataSource/rhel9`)
+2. Boot through the full RHEL9 kernel init sequence
+3. Run `cloud-init` to set hostname and configuration
+4. Only then reach `Running` state
+
+This adds 30–60 seconds per VM compared to cirros, and it stresses the **CDI (Containerized Data Importer)** clone pipeline alongside the virt-controller.
+
+The 3 rounds escalate pressure:
+
+| Round | VMs | vCPU | RAM each | Churn cycles | What it stresses |
+|---|---|---|---|---|---|
+| R01 | 3 | 1 | 2Gi | 3 | Baseline RHEL9 — CDI clone + real boot |
+| R02 | 5 | 1 | 2Gi | 3 | More VMs — clone pipeline under parallel load |
+| R03 | 6 | 2 | 4Gi | 2 | Heavy VMs — doubled CPU and RAM, CDI contention |
+
+**What this proves:** *"We ran real RHEL9 virtual machines through continuous create-and-destroy cycles — not fake lightweight containers, not cirros. Each VM booted the real OS from a cloned disk. The cluster handled three escalating rounds without stuck VMs, without CDI timeouts, and without boot times degrading. That is a production-ready virtualisation platform."*
+
+---
+
+## What it measures
+
+| Metric | What it means |
+|---|---|
+| **VMIRunning P99** | Time from VM creation to Running state — includes disk clone + OS boot |
+| **VMReady P99** | Time to full readiness including cloud-init completion |
+| **CDI clone duration** | How long the DataVolume PVC clone takes per round |
+| **virt-controller RSS** | Memory footprint — should stay flat or return to baseline after each round |
+| **Delete duration** | Time to fully remove a batch of VMs |
+| **Stuck VM count** | VMs that never reach Running (should always be zero) |
+
+---
+
+## Before you start — open these browser tabs
+
+| Tab | Where | What you watch |
+|---|---|---|
+| **Tab 1** | Console (already open) | Terminal — streaming kube-burner logs |
+| **Tab 2** | Virtualization → VirtualMachines | VM count and status changing per round |
+| **Tab 3** | Observe → Metrics | `process_resident_memory_bytes{pod=~"virt-controller.*"}` |
+| **Tab 4** | Storage → PersistentVolumeClaims | PVCs appearing and being cloned (filter by namespace) |
+
+---
+
+## Pre-flight checklist
+
+- [ ] Test 15 completed successfully
+- [ ] Logged into the OpenShift web console
+- [ ] OpenShift Virtualization installed: `oc get hyperconverged -A` returns a result
+- [ ] Cluster-admin permissions
+- [ ] RHEL9 DataSource ready: `oc get datasource rhel9 -n openshift-virtualization-os-images`
+- [ ] At least 3 worker nodes with ~20 Gi free RAM total
+- [ ] At least 180 Gi free storage (6 VMs × 30 Gi per clone)
+
+---
+
+## Step-by-step guide
+
+---
+
+### Step 1 — Open the web terminal and verify the cluster
+
+Click the **`>_` icon** in the top-right toolbar of the OpenShift console. Run:
+
+```bash
+oc whoami
+oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
+oc get hyperconverged -A
+oc get datasource rhel9 -n openshift-virtualization-os-images
+```
+
+RHEL9 must show `READY: True` before continuing. If it shows `False`, the golden image has not finished importing — wait a few minutes and re-check.
+
+---
+
+### Step 2 — Create the project and RBAC
+
+```bash
+oc new-project burner-test15b
+oc create serviceaccount kube-burner -n burner-test15b
+```
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner-test15b
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes, datasources, dataimportcrons]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-test15b
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner-test15b
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-test15b
+EOF
+```
+
+Verify all objects exist:
+
+```bash
+oc get serviceaccount kube-burner -n burner-test15b
+oc get clusterrole kube-burner-test15b
+oc get clusterrolebinding kube-burner-test15b
+```
+
+---
+
+### Step 3 — Write the 3 VM template files
+
+Run each block one at a time — paste the full block including the `EOF` line.
+
+**File 1 — `vm-r1-rhel9.yml` (Round 1: 3 VMs, 1vCPU/2Gi)**
+
+```bash
+cat > /tmp/vm-r1-rhel9.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r1-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15b-churn
+    round: r01
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r1-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test15b-churn
+        round: r01
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r1-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r1-rhel9-{{.Iteration}}-{{.Replica}}
+EOF
+```
+
+**File 2 — `vm-r2-rhel9.yml` (Round 2: 5 VMs, 1vCPU/2Gi)**
+
+```bash
+cat > /tmp/vm-r2-rhel9.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r2-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15b-churn
+    round: r02
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r2-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test15b-churn
+        round: r02
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r2-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r2-rhel9-{{.Iteration}}-{{.Replica}}
+EOF
+```
+
+**File 3 — `vm-r3-rhel9.yml` (Round 3: 6 VMs, 2vCPU/4Gi)**
+
+```bash
+cat > /tmp/vm-r3-rhel9.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: r3-rhel9-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: test15b-churn
+    round: r03
+    os: rhel9
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: r3-rhel9-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: test15b-churn
+        round: r03
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: r3-rhel9-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: r3-rhel9-{{.Iteration}}-{{.Replica}}
+EOF
+```
+
+---
+
+### Step 4 — Write the kube-burner config file
+
+```bash
+cat > /tmp/test15b-churn-config.yml << 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # ROUND 1: RHEL9 — 3 VMs, 1vCPU/2Gi, 3 churn cycles
+  # Baseline real-OS churn: CDI clone + full RHEL9 boot
+  # ============================================================
+  - name: r01-cre-rhel9
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r1-rhel9.yml
+        replicas: 3
+
+  - name: r01-c1-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-rhel9
+
+  - name: r01-c1-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r1-rhel9.yml
+        replicas: 3
+
+  - name: r01-c2-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre
+
+  - name: r01-c2-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r1-rhel9.yml
+        replicas: 3
+
+  - name: r01-c3-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c2-cre
+
+  - name: r01-c3-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r1-rhel9.yml
+        replicas: 3
+
+  - name: r01-final-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r01
+
+  # ============================================================
+  # ROUND 2: RHEL9 — 5 VMs, 1vCPU/2Gi, 3 churn cycles
+  # More VMs: parallel CDI clones under contention
+  # ============================================================
+  - name: r02-cre-rhel9
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 5
+
+  - name: r02-c1-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-rhel9
+
+  - name: r02-c1-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 5
+
+  - name: r02-c2-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre
+
+  - name: r02-c2-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 5
+
+  - name: r02-c3-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c2-cre
+
+  - name: r02-c3-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 5
+
+  - name: r02-final-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r02
+
+  # ============================================================
+  # ROUND 3: RHEL9 heavy — 6 VMs, 2vCPU/4Gi, 2 churn cycles
+  # Maximum pressure: doubled CPU and RAM — full production size
+  # ============================================================
+  - name: r03-cre-rhel9
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 6
+
+  - name: r03-c1-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-rhel9
+
+  - name: r03-c1-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 6
+
+  - name: r03-c2-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre
+
+  - name: r03-c2-cre
+    namespace: burner-test15b
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 6
+
+  - name: r03-final-del
+    namespace: burner-test15b
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: test15b-churn
+EOF
+```
+
+---
+
+### Step 5 — Verify all 4 files exist
+
+```bash
+ls -lh /tmp/test15b-churn-config.yml \
+        /tmp/vm-r1-rhel9.yml \
+        /tmp/vm-r2-rhel9.yml \
+        /tmp/vm-r3-rhel9.yml
+```
+
+All 4 must show non-zero file sizes before continuing.
+
+---
+
+### Step 6 — Create the ConfigMap
+
+```bash
+oc create configmap test15b-churn-config \
+  --from-file=config.yml=/tmp/test15b-churn-config.yml \
+  --from-file=vm-r1-rhel9.yml=/tmp/vm-r1-rhel9.yml \
+  --from-file=vm-r2-rhel9.yml=/tmp/vm-r2-rhel9.yml \
+  --from-file=vm-r3-rhel9.yml=/tmp/vm-r3-rhel9.yml \
+  -n burner-test15b
+
+oc get configmap test15b-churn-config -n burner-test15b
+```
+
+Expected: `configmap/test15b-churn-config created` followed by a listing showing `DATA: 4`.
+
+---
+
+### Step 7 — Switch to Tab 2
+
+Go to **Virtualization → VirtualMachines** and set the namespace filter to `burner-test15b`. Keep this tab visible for the full run. You will see:
+
+- R01: 3 RHEL9 VMs appear, boot (~35–45s), then disappear — 3 times
+- R02: 5 RHEL9 VMs cycling — watch for CDI clone overlap
+- R03: 6 heavy RHEL9 VMs — longest boot times, highest memory pressure
+
+---
+
+### Step 8 — Launch the kube-burner job
+
+```bash
+UUID="test15b-$(date +%s)"
+echo "UUID: $UUID"
+
+cat << JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-test15b-churn
+  namespace: burner-test15b
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: test15b-churn-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML
+```
+
+---
+
+### Step 9 — Watch the pod start, then stream logs
+
+```bash
+oc get pod -n burner-test15b -w
+```
+
+Wait until the pod shows `Running`. Then stream logs:
+
+```bash
+oc logs -f job/kb-test15b-churn -n burner-test15b
+```
+
+You will see each round announce itself:
+
+```
+INFO Triggering job: r01-cre-rhel9     ← Round 1 starts (3 RHEL9 VMs)
+INFO Job r01-cre-rhel9 took 42s
+INFO Triggering job: r01-c1-del
+INFO Job r01-c1-del took 30s
+INFO Triggering job: r01-c1-cre        ← Churn cycle 1
+...
+INFO Triggering job: r02-cre-rhel9     ← Round 2 (5 VMs)
+...
+INFO Triggering job: r03-cre-rhel9     ← Round 3 (6 heavy VMs)
+...
+INFO Finished execution with UUID: test15b-...
+```
+
+---
+
+### Step 10 — What to say at each phase
+
+**During R01 (3 RHEL9 VMs cycling):**
+*"These are real RHEL9 VMs, not lightweight containers. Watch the boot time — around 35–45 seconds each. That's the CDI disk clone plus the full kernel init sequence. We're doing this 3 times in a row."*
+
+**During R02 (5 VMs running simultaneously):**
+*"Now we have 5 VMs cloning their disks at the same time. Watch the Storage → PVCs tab — you'll see 5 DataVolumes being created and cloned in parallel. This is where storage I/O throughput becomes the bottleneck."*
+
+**During R03 (6 VMs at 2vCPU/4Gi):**
+*"This is the production-size load — 6 RHEL9 VMs, each with 2 vCPUs and 4 Gi of RAM. That's 24 Gi of RAM in use by VMs alone, plus 180 Gi of storage clones. If boot times stay under 2 minutes and no VMs get stuck, the cluster is production-ready."*
+
+---
+
+### Step 11 — What good looks like
+
+| Metric | Healthy | Investigate |
+|---|---|---|
+| R01 VMIRunning P99 | < 60s | > 3 minutes |
+| R02 VMIRunning P99 | < 90s | > 5 minutes |
+| R03 VMIRunning P99 | < 2 minutes | > 8 minutes |
+| virt-controller RSS peak | < 300 MiB | > 600 MiB |
+| virt-controller RSS after test | Returns toward baseline | Keeps climbing |
+| Stuck VMs at end of any round | 0 | Any |
+| Final VM count after test | 0 | Any remaining |
+
+---
+
+### Step 12 — Clean up
+
+```bash
+oc delete job kb-test15b-churn -n burner-test15b 2>/dev/null || true
+oc delete vm -l app=test15b-churn -n burner-test15b 2>/dev/null || true
+oc delete configmap test15b-churn-config -n burner-test15b 2>/dev/null || true
+oc delete project burner-test15b
+oc delete clusterrole kube-burner-test15b 2>/dev/null || true
+oc delete clusterrolebinding kube-burner-test15b 2>/dev/null || true
+```
+
+Verify clean:
+
+```bash
+oc get projects | grep burner-test15b
+oc get vm -A 2>/dev/null | grep test15b
+# Both should return nothing
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `datasource "rhel9" not found` | Golden image not imported yet — `oc get datasource rhel9 -n openshift-virtualization-os-images` must show `READY: True` |
+| VMs stuck in `Provisioning` | CDI clone is waiting — check `oc get datavolumes -n burner-test15b` for errors |
+| VMs stuck in `Pending` | Insufficient RAM — R03 needs ~24 Gi free. Reduce replicas from 6 to 3 |
+| `serviceaccount "kube-burner" not found` | Re-run Step 2 — always create the SA before the ClusterRoleBinding |
+| `no kind VirtualMachine` | OpenShift Virtualization not installed |
+| ConfigMap already exists on rerun | `oc delete configmap test15b-churn-config -n burner-test15b` then recreate |
+| R03 boot times over 5 minutes | Storage is a bottleneck — check CDI concurrent clone limits and storage class throughput |
+
+---
+
+*Test 15B confirms your cluster handles sustained RHEL9 VM churn with real OS boot sequences. For Windows VM churn, see [Test 15C](15c-vm-churn-windows.md).*
