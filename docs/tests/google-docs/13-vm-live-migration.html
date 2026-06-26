@@ -1,113 +1,111 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 13: VM Live Migration — Moving Running Computers Without Interruption</title>
-  <!--
-    GOOGLE DOCS IMPORT:
-    1. Go to https://docs.google.com
-    2. File > Open > Upload > select this file
-  -->
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  h4{font-size:11pt;color:#3c4043;margin-top:14px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}
-  tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-  </style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 13: VM Live Migration — Moving Running Computers Without Interruption</h1>
-<br>
-<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐⭐ Expert</div>
-<div class="note"><strong>Time to run:</strong> ~30 minutes</div>
-<div class="note"><strong>What it does:</strong> Starts multiple VMs and then live-migrates them to different nodes while they continue running — the hardest operation in OpenShift Virtualization</div>
-<div class="warn"><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed, at least <strong>2 worker nodes</strong></div>
-<br><hr><br>
-
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐ Expert  </blockquote>
+<blockquote><strong>Time to run:</strong> ~30 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Starts multiple VMs and then live-migrates them to different nodes while they continue running — the hardest operation in OpenShift Virtualization  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed, at least <strong>2 worker nodes</strong></blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
+<hr>
+<p></p>
 <h2>What is this test? 🚚🖥️</h2>
+<p></p>
 <p>Imagine you are moving furniture while people are still sitting on it — that is what live migration does for virtual machines.</p>
+<p></p>
 <p><strong>Live migration</strong> moves a running VM from one physical server (node) to another without:</p>
-<ul>
-  <li>Shutting down the VM</li>
-  <li>Interrupting applications running inside the VM</li>
-  <li>Losing network connections</li>
-</ul>
-<p>This is one of the most demanding operations a virtualisation platform can perform. It requires copying the VM's entire memory to the destination node while the VM keeps running, synchronising memory changes in real-time, and cutting over at exactly the right moment so no packets are lost.</p>
-<br><hr><br>
-
+<li>Shutting down the VM</li>
+<li>Interrupting applications running inside the VM</li>
+<li>Losing network connections</li>
+<p></p>
+<p>This is one of the most demanding operations a virtualisation platform can perform. It requires:</p>
+<li><strong>Copying the VM's entire memory</strong> to the destination node while the VM keeps running</li>
+<li><strong>Synchronising memory changes</strong> in real-time during the copy</li>
+<li><strong>Cutting over</strong> at exactly the right moment so no packets are lost</li>
+<p></p>
+<p>The <strong>VM Live Migration</strong> test runs many VMs simultaneously and then migrates all of them, measuring:</p>
+<li>How long each migration takes</li>
+<li>Whether any VMs fail to migrate</li>
+<li>Whether the cluster API server stays responsive under the migration traffic load</li>
+<p></p>
+<hr>
+<p></p>
 <h2>Why does this matter? 🤔</h2>
+<p></p>
 <p>Live migration is used in production for:</p>
-<ul>
-  <li><strong>Node maintenance</strong> — drain a node without downtime</li>
-  <li><strong>Load balancing</strong> — move VMs off overloaded nodes</li>
-  <li><strong>Firmware/kernel upgrades</strong> — evacuate nodes to apply updates</li>
-  <li><strong>Disaster recovery</strong> — pre-emptively move VMs away from a failing node</li>
-</ul>
-<p>If your cluster cannot live-migrate VMs reliably, your maintenance windows become VM downtime windows.</p>
-<br><hr><br>
-
+<li><strong>Node maintenance</strong> — drain a node without downtime (<code>oc adm drain</code>)</li>
+<li><strong>Load balancing</strong> — move VMs off overloaded nodes</li>
+<li><strong>Firmware/kernel upgrades</strong> — evacuate nodes to apply updates</li>
+<li><strong>Disaster recovery</strong> — pre-emptively move VMs away from a failing node</li>
+<p></p>
+<p>If your cluster cannot live-migrate VMs reliably, your maintenance windows become VM downtime windows. This test finds out before that happens in production.</p>
+<p></p>
+<hr>
+<p></p>
+<h2>What does it measure?</h2>
+<p></p>
+<tr><td>Metric</td><td>What it means</td></tr>
+<tr><td><strong>Migration start time</strong></td><td>How fast KubeVirt starts the migration process</td></tr>
+<tr><td><strong>Memory copy phase duration</strong></td><td>How long it takes to copy VM RAM to the destination node</td></tr>
+<tr><td><strong>Total migration time</strong></td><td>Wall-clock time from trigger to completion</td></tr>
+<tr><td><strong>Concurrent migration throughput</strong></td><td>How many migrations per minute the cluster can sustain</td></tr>
+<tr><td><strong>Migration failure rate</strong></td><td>Percentage of migrations that fail or abort</td></tr>
+<p></p>
+<hr>
+<p></p>
 <h2>How live migration works</h2>
-<pre>NODE A (source)                    NODE B (destination)
+<p></p>
+<pre><code>NODE A (source)                    NODE B (destination)
 ─────────────────                  ─────────────────────
  Running VM                         Empty slot reserved
+   │                                        │
    │── 1. Copy all memory pages ──────────►│
-   │── 2. Track dirty pages (still running)►│
-   │── 3. Copy dirty pages (delta) ──────►  │
-   │── 4. Final dirty pages (tiny) ───────► │
+   │                                        │
+   │── 2. Track dirty pages (still running)─►│
+   │                                        │
+   │── 3. Copy dirty pages (delta) ─────►  │
+   │                                        │
+   │── 4. Final dirty pages (tiny) ──────► │
+   │                                        │
    ╳  (old VM process ends)         VM resumes here ✅
-                                    Same IP, same state</pre>
-<br><hr><br>
-
-<h2>What does it measure?</h2>
-<table>
-<thead><tr><th>Metric</th><th>What it means</th></tr></thead>
-<tbody>
-<tr><td>Migration start time</td><td>How fast KubeVirt starts the migration process</td></tr>
-<tr><td>Memory copy phase duration</td><td>How long it takes to copy VM RAM to the destination</td></tr>
-<tr><td>Total migration time</td><td>Wall-clock time from trigger to completion</td></tr>
-<tr><td>Concurrent migration throughput</td><td>How many migrations per minute the cluster can sustain</td></tr>
-<tr><td>Migration failure rate</td><td>Percentage of migrations that fail or abort</td></tr>
-</tbody>
-</table>
-<br><hr><br>
-
+                                    Same IP, same state</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Before you start ✅</h2>
-<ul>
-  <li>kube-burner installed</li>
-  <li>Logged in as cluster-admin</li>
-  <li>OpenShift Virtualization installed</li>
-  <li><strong>At least 2 worker nodes</strong> — migration requires a destination node</li>
-</ul>
+<p></p>
+<li>[ ] kube-burner installed</li>
+<li>[ ] Logged in as cluster-admin</li>
+<li>[ ] OpenShift Virtualization installed</li>
+<li>[ ] <strong>At least 2 worker nodes</strong> — migration requires a destination node</li>
+<li>[ ] Nodes have shared storage OR <code>LiveMigrationPolicy</code> set to allow post-copy</li>
+<p></p>
 <p>Check available worker nodes:</p>
-<pre>oc get nodes -l node-role.kubernetes.io/worker</pre>
+<p></p>
+<pre><code>oc get nodes -l node-role.kubernetes.io/worker</code></pre>
+<p></p>
 <p>You need at least 2 with <code>Ready</code> status.</p>
-<br><hr><br>
-
+<p></p>
+<p>Check that live migration is enabled:</p>
+<p></p>
+<pre><code>oc get kubevirt -n openshift-cnv -o jsonpath='{.items[0].spec.configuration.developerConfiguration}'</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Step-by-step guide</h2>
-
-<div class="step-hdr">Step 1 — Create namespace and RBAC</div>
-<pre>oc new-project burner-migration</pre>
-<pre>oc apply -f - &lt;&lt;'EOF'
+<p></p>
+<h3>Step 1 — Create namespace and RBAC</h3>
+<p></p>
+<pre><code>oc new-project burner-migration</code></pre>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -147,15 +145,20 @@ subjects:
   - kind: ServiceAccount
     name: kube-burner
     namespace: burner-migration
-EOF</pre>
-
-<div class="step-hdr">Step 2 — Create config files</div>
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Create config files</h3>
+<p></p>
 <p>Create <code>migration-config.yml</code>:</p>
-<pre>global:
+<p></p>
+<pre><code>global:
   gc: true
   measurements: []
 
 jobs:
+  # Phase 1: Create VMs (stopped)
   - name: create-vms
     jobType: create
     namespace: burner-migration
@@ -170,22 +173,25 @@ jobs:
         inputVars:
           memory: 128Mi
 
+  # Phase 2: Start all VMs (wait for Running state)
   - name: start-vms
     jobType: kubevirt
     executionMode: parallel
-    jobPause: 60s
+    jobPause: 60s          # Give VMs time to fully boot before migrating
     objects:
       - kubeVirtOp: start
         labelSelector: {kube-burner.io/job: create-vms}
 
+  # Phase 3: Live-migrate all running VMs
   - name: migrate-vms
     jobType: kubevirt
-    executionMode: sequential
+    executionMode: sequential   # Migrate one at a time (safer, more measurable)
     jobPause: 30s
     objects:
       - kubeVirtOp: migrate
         labelSelector: {kube-burner.io/job: create-vms}
 
+  # Phase 4: Stop all VMs after migration
   - name: stop-vms
     jobType: kubevirt
     executionMode: parallel
@@ -193,10 +199,11 @@ jobs:
       - kubeVirtOp: stop
         labelSelector: {kube-burner.io/job: create-vms}
         inputVars:
-          force: false</pre>
-
+          force: false</code></pre>
+<p></p>
 <p>Create <code>vm-template.yml</code>:</p>
-<pre>apiVersion: kubevirt.io/v1
+<p></p>
+<pre><code>apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: migrate-vm-{{.Iteration}}-{{.Replica}}
@@ -216,7 +223,8 @@ spec:
         devices:
           disks:
             - name: containerdisk
-              disk: {bus: virtio}
+              disk:
+                bus: virtio
           interfaces:
             - name: default
               masquerade: {}
@@ -226,16 +234,22 @@ spec:
       volumes:
         - name: containerdisk
           containerDisk:
-            image: quay.io/kubevirt/cirros-registry-disk-demo:latest</pre>
-
-<div class="step-hdr">Step 3 — Package into a ConfigMap</div>
-<pre>oc create configmap migration-config \
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Package into a ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap migration-config \
   --from-file=config.yml=migration-config.yml \
   --from-file=vm-template.yml=vm-template.yml \
-  -n burner-migration</pre>
-
-<div class="step-hdr">Step 4 — Run the test</div>
-<pre>cat &lt;&lt;'EOF' | oc apply -f -
+  -n burner-migration</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Run the test</h3>
+<p></p>
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -267,55 +281,90 @@ spec:
             name: migration-config
         - name: workdir
           emptyDir: {}
-EOF</pre>
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Watch migrations happen in real time</h3>
+<p></p>
+<p>In a separate terminal, watch the migration objects:</p>
+<p></p>
+<pre><code># Watch VirtualMachineInstanceMigration objects as they are created and completed
+watch "oc get vmim -n burner-migration"</code></pre>
+<p></p>
+<p>You will see migration objects appear as kube-burner triggers them:</p>
+<p></p>
+<pre><code>NAME                        PHASE       VMI
+virt-launcher-migrate-0-1   Running     migrate-vm-1-1
+virt-launcher-migrate-0-2   Succeeded   migrate-vm-1-2</code></pre>
+<p></p>
+<p>Also check which node each VM moved to:</p>
+<p></p>
+<pre><code>oc get vmi -n burner-migration -o wide</code></pre>
+<p></p>
+<p>The <code>NODE</code> column should change as each migration completes.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Read the results</h3>
+<p></p>
+<pre><code>oc logs -f job/kb-migration -n burner-migration</code></pre>
+<p></p>
+<p><strong>What to look for:</strong></p>
+<li><code>migrate-vms</code> phase duration — total time to migrate all VMs</li>
+<li>Any <code>migration failed</code> or <code>migration aborted</code> messages</li>
+<li>Whether subsequent phases (<code>stop-vms</code>) complete cleanly</li>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Push harder (scale up)</h3>
+<p></p>
+<p>Once the basic test works, increase VM count to find the limit:</p>
+<p></p>
+<pre><code># Edit ConfigMap to increase replicas to 10
+oc edit configmap migration-config -n burner-migration
+# Change replicas: 4 → replicas: 10
 
-<div class="step-hdr">Step 5 — Watch migrations in real time</div>
-<pre># Watch VirtualMachineInstanceMigration objects
-watch "oc get vmim -n burner-migration"
-
-# Watch which node each VM is on
-oc get vmi -n burner-migration -o wide</pre>
-
-<div class="step-hdr">Step 6 — Read the results</div>
-<pre>oc logs -f job/kb-migration -n burner-migration</pre>
-
-<div class="step-hdr">Step 7 — Push harder (scale up)</div>
-<p>Increase VM count to find the limit. The migration controller defaults to 5 concurrent migrations cluster-wide. Increase via:</p>
-<pre>oc edit hyperconverged -n openshift-cnv
-# Set: spec.configuration.migrationConfiguration.parallelMigrationsPerCluster: 10</pre>
-
-<table>
-<thead><tr><th>VM Count</th><th>Expected behaviour</th></tr></thead>
-<tbody>
-<tr><td>4</td><td>Baseline — confirm migration works</td></tr>
-<tr><td>8</td><td>Test parallel migration pressure</td></tr>
-<tr><td>16</td><td>Approaching most 3-node cluster limits</td></tr>
-<tr><td>32</td><td>Pushing the ceiling — expect longer migration queues</td></tr>
-</tbody>
-</table>
-
-<div class="step-hdr">Step 8 — Clean up</div>
-<pre>oc delete job kb-migration -n burner-migration
+# Re-run
+oc delete job kb-migration -n burner-migration
+cat &lt;&lt;'EOF' | oc apply -f -
+... (same job YAML as Step 4)
+EOF</code></pre>
+<p></p>
+<p><strong>Escalation ladder:</strong></p>
+<li>4 VMs → confirm migration works</li>
+<li>8 VMs → test parallel migration pressure</li>
+<li>16 VMs → approaching most 3-node cluster limits</li>
+<li>32 VMs → pushing the ceiling — expect longer migration queues</li>
+<p></p>
+<p>The migration controller limits concurrent migrations by default to 5 cluster-wide. Adjust via:</p>
+<p></p>
+<pre><code>oc edit hyperconverged -n openshift-cnv
+# Set: spec.configuration.migrationConfiguration.parallelMigrationsPerCluster: 10</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-migration -n burner-migration
+oc delete configmap migration-config -n burner-migration
 oc delete project burner-migration
 oc delete clusterrole kube-burner-virt
-oc delete clusterrolebinding kube-burner-virt</pre>
-<br><hr><br>
-
+oc delete clusterrolebinding kube-burner-virt</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
-<tbody>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
 <tr><td><code>VirtualMachineInstanceMigration</code> stuck in <code>Pending</code></td><td>Only 1 worker node — migration requires a destination node</td></tr>
 <tr><td>Migration <code>Aborted</code> immediately</td><td>LiveMigration policy may require shared storage; check <code>oc get kubevirt -n openshift-cnv</code></td></tr>
 <tr><td>VMs never reach <code>Running</code> before migration</td><td>Increase <code>jobPause</code> in <code>start-vms</code> phase to allow more boot time</td></tr>
-<tr><td><code>migrate</code> operation times out</td><td>Increase VM memory or increase parallelMigrationsPerCluster</td></tr>
-<tr><td><code>forbidden: VirtualMachineInstanceMigrations</code></td><td>Add <code>virtualmachineinstancemigrations</code> to the ClusterRole</td></tr>
-</tbody>
-</table>
-
-<div class="footer">
-  <p>Kube-Burner v2.6.1 | OpenShift Virtualization | <a href="https://kube-burner.github.io/kube-burner/latest/">kube-burner docs</a></p>
-  <p>Next: <a href="14-vm-density-scaling.html">Test 14 — VM Density Scaling</a></p>
-</div>
-</body>
-</html>
+<tr><td><code>migrate</code> operation times out</td><td>Increase VM memory — larger VMs take longer to migrate; or increase parallelMigrationsPerCluster</td></tr>
+<tr><td><code>forbidden: VirtualMachineInstanceMigrations</code></td><td>Add <code>virtualmachineinstancemigrations</code> to the ClusterRole (see RBAC in Step 1)</td></tr>
+<p></p>
+<hr>
+<p></p>
+<p><em>Next test: <a href="14-vm-density-scaling.md">14 — VM Density Scaling</a> — find exactly how many VMs your cluster can handle</em></p>
+<p></p>
+</body></html>

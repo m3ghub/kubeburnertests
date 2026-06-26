@@ -1,105 +1,262 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 18: OCP Node Density — Pods Per Node at Production Scale</title>
-  <!--
-    GOOGLE DOCS IMPORT:
-    1. Go to https://docs.google.com
-    2. File > Open > Upload > select this file
-  -->
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}
-  tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-  </style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 18: OCP Node Density — Pods Per Node at Production Scale</h1>
-<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐ Intermediate</div>
-<div class="note"><strong>Time to run:</strong> ~10 minutes</div>
-<div class="note"><strong>What it does:</strong> Schedules pods per worker node using the exact same benchmark Red Hat runs before shipping every OpenShift release</div>
-<div class="note"><strong>Requires:</strong> Multi-node OpenShift cluster</div>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐ Intermediate  </blockquote>
+<blockquote><strong>Time to run:</strong> ~10 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Schedules pods per worker node using the exact same benchmark Red Hat runs before shipping every OpenShift release  </blockquote>
+<blockquote><strong>Requires:</strong> Multi-node OpenShift cluster</blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
 <hr>
+<p></p>
 <h2>What is this test? 🏢</h2>
+<p></p>
 <p>Imagine a skyscraper where every floor is a worker node. You want to know: <strong>how many offices (pods) can each floor hold before the elevators (the scheduler) start getting overwhelmed?</strong></p>
+<p></p>
 <p>The generic pod-density test (Test 02) gives you a rough answer. <strong>OCP Node Density gives you the answer that actually matters for OpenShift</strong> — because it packs pods the way OpenShift itself does, using the same resource reservations, network policies, and metrics profiles that Red Hat uses internally to validate every OCP release.</p>
+<p></p>
 <p>When you show this to a customer, you can say: <em>"This is the exact same benchmark Red Hat runs before they ship an OpenShift version. Your cluster passed it."</em></p>
+<p></p>
 <hr>
+<p></p>
+<h2>What this test does</h2>
+<p></p>
+<p><code>node-density</code> is the OpenShift-tuned version of the generic pod-density test.</p>
+<p>It schedules a configurable number of pods per worker node using OpenShift-specific</p>
+<p>resource definitions — proper tolerations, node selectors, OCP-native network policies —</p>
+<p>and collects the full Red Hat performance metrics profile.</p>
+<p></p>
+<p>Unlike the generic <code>pod-density</code> test, this workload:</p>
+<p></p>
+<li>Uses the pre-built metrics profile from kube-burner-ocp (etcd, API server, scheduler, kubelet)</li>
+<li>Applies OCP-specific alert thresholds</li>
+<li>Respects OpenShift's reserved-resources model when sizing pods</li>
+<li>Verifies pods reach <code>Running</code> phase and records latency percentiles (P50/P95/P99)</li>
+<p></p>
+<hr>
+<p></p>
 <h2>What it measures</h2>
-<table>
-<thead><tr><th>Metric</th><th>Description</th></tr></thead>
-<tbody>
+<p></p>
+<tr><td>Metric</td><td>Description</td></tr>
 <tr><td>Pod creation latency (P99)</td><td>Time from API call to pod scheduled</td></tr>
 <tr><td>Pod ready latency (P99)</td><td>Time from scheduled to container Ready</td></tr>
 <tr><td>API server request rate</td><td>Requests/second during peak creation</td></tr>
-<tr><td>etcd write throughput</td><td>Writes/second during creation burst</td></tr>
+<tr><td>etcd write throughput</td><td>Writes/second to etcd during creation burst</td></tr>
+<tr><td>kubelet sync latency</td><td>Time for kubelet to process each pod</td></tr>
 <tr><td>Scheduler throughput</td><td>Pods scheduled per second</td></tr>
-</tbody>
-</table>
+<p></p>
 <hr>
-<h2>Browser tabs to open before you start</h2>
-<table>
-<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
-<tbody>
+<p></p>
+<h2>How it works</h2>
+<p></p>
+<pre><code>  YOU                        CLUSTER
+   │
+   │  oc apply -f job.yaml
+   ▼
+┌──────────────────────────────────────────────────────┐
+│  kube-burner Job (quay.io/kube-burner/kube-burner)   │
+│                                                      │
+│  ┌──────────────────────────────────────────┐        │
+│  │  node-density-config.yml                 │        │
+│  │  ┌─────────────────────────────────────┐ │        │
+│  │  │  jobType: create                    │ │        │
+│  │  │  Pods per node: N                   │ │        │
+│  │  │  Node selector: worker              │ │        │
+│  │  └─────────────────────────────────────┘ │        │
+│  └──────────────────────────────────────────┘        │
+│                                                      │
+│  Measures: PodScheduled, ContainersReady, Ready      │
+└──────────────────────────────────────────────────────┘
+   │
+   ▼
+Results: P50 / P95 / P99 pod-ready latency</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h2>Before you start — open these browser tabs</h2>
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
 <tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
 <tr><td><strong>Tab 2</strong></td><td>Workloads → Pods</td><td>Pods appearing in real time</td></tr>
 <tr><td><strong>Tab 3</strong></td><td>Observe → Metrics</td><td><code>sum(kube_pod_status_phase{phase="Running"})</code></td></tr>
 <tr><td><strong>Tab 4</strong></td><td>Compute → Nodes</td><td>CPU/Memory utilization climbing</td></tr>
-</tbody>
-</table>
+<p></p>
 <hr>
+<p></p>
+<h2>Pre-flight checklist</h2>
+<p></p>
+<li>[ ] Logged into the OpenShift web console</li>
+<li>[ ] Cluster-admin permissions (<code>oc whoami</code> returns your username)</li>
+<li>[ ] At least 2 worker nodes (<code>oc get nodes -l node-role.kubernetes.io/worker</code>)</li>
+<li>[ ] RAM available per worker: <code>oc adm top nodes</code></li>
+<p></p>
+<hr>
+<p></p>
 <h2>Step-by-step guide</h2>
-<div class="step-hdr">Step 1 — Open the web terminal</div>
-<p>Click the <strong><code>&gt;_</code> icon</strong> in the top-right. Confirm you are logged in:</p>
-<pre>oc whoami
-oc get nodes --no-headers | awk '{print $1, $2}'</pre>
-<div class="step-hdr">Step 2 — Choose pods per node</div>
-<table>
-<thead><tr><th>Workers</th><th>Starter</th><th>Medium</th><th>Heavy</th></tr></thead>
-<tbody>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 1 — Open the web terminal</h3>
+<p></p>
+<p>Click the <strong><code>>_</code> icon</strong> in the top-right of the console toolbar. Confirm you are logged in:</p>
+<p></p>
+<pre><code>oc whoami
+oc get nodes --no-headers | awk '{print $1, $2}'</code></pre>
+<p></p>
+<p>All nodes must show <code>Ready</code>.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Note how many worker nodes you have</h3>
+<p></p>
+<pre><code>WORKER_COUNT=$(oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l | tr -d ' ')
+echo "Worker nodes: $WORKER_COUNT"</code></pre>
+<p></p>
+<p>Choose your pods-per-node target:</p>
+<p></p>
+<tr><td>Workers</td><td>Starter</td><td>Medium</td><td>Heavy</td></tr>
 <tr><td>2–3 nodes</td><td>50 pods/node</td><td>100 pods/node</td><td>200 pods/node</td></tr>
 <tr><td>4–6 nodes</td><td>100 pods/node</td><td>200 pods/node</td><td>245 pods/node</td></tr>
-</tbody>
-</table>
-<div class="step-hdr">Step 3 — Create the project and RBAC</div>
-<pre>oc new-project burner-node-density
-oc create serviceaccount kube-burner -n burner-node-density</pre>
-<p>Apply ClusterRole and binding (paste the full block from the markdown guide).</p>
-<pre>oc get serviceaccount kube-burner -n burner-node-density
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Create the project and RBAC</h3>
+<p></p>
+<pre><code>oc new-project burner-node-density
+oc create serviceaccount kube-burner -n burner-node-density</code></pre>
+<p></p>
+<p>Apply the ClusterRole and binding:</p>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-node-density
+EOF</code></pre>
+<p></p>
+<p>Verify:</p>
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-node-density
 oc get clusterrole kube-burner
-oc get clusterrolebinding kube-burner</pre>
-<div class="tip">All three must return a result before continuing.</div>
-<div class="step-hdr">Step 4 — Write config and pod template</div>
-<pre>PODS_PER_NODE=50
-UUID="node-density-$(date +%s)"
-# Write config.yml and pod-template.yml (see full markdown guide)</pre>
-<div class="step-hdr">Step 5 — Create the ConfigMap</div>
-<pre>oc create configmap node-density-config \
+oc get clusterrolebinding kube-burner</code></pre>
+<p></p>
+<p>All three must return a result.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Switch to Tab 2</h3>
+<p></p>
+<p>Go to <strong>Workloads → Pods</strong> in the console. Filter by namespace <code>node-density</code>. Keep this visible — you will see pods appear and transition to Running during the test.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Write the config files</h3>
+<p></p>
+<p>Set your parameters (change <code>PODS_PER_NODE</code> to match your choice from Step 2):</p>
+<p></p>
+<pre><code>PODS_PER_NODE=50
+UUID="node-density-$(date +%s)"</code></pre>
+<p></p>
+<p>Write the config:</p>
+<p></p>
+<pre><code>cat &gt; /tmp/node-density-config.yml &lt;&lt; EOF
+global:
+  gc: false
+  measurements:
+    - name: podLatency
+      esIndex: kube-burner
+
+jobs:
+  - name: create-pods
+    namespace: burner-node-density
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: true
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: /config/pod-template.yml
+        replicas: ${PODS_PER_NODE}
+
+  - name: delete-pods
+    namespace: burner-node-density
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: v1
+        kind: Pod
+        labelSelector: {kube-burner-job: create-pods}
+EOF</code></pre>
+<p></p>
+<p>Write the pod template:</p>
+<p></p>
+<pre><code>cat &gt; /tmp/pod-template.yml &lt;&lt; 'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: density-pod-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: density
+    kube-burner-job: create-pods
+spec:
+  containers:
+    - name: pause
+      image: gcr.io/google_containers/pause:3.1
+      resources:
+        requests:
+          cpu: 10m
+          memory: 10Mi
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Create the ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap node-density-config \
   --from-file=config.yml=/tmp/node-density-config.yml \
   --from-file=pod-template.yml=/tmp/pod-template.yml \
-  -n burner-node-density</pre>
-<div class="step-hdr">Step 6 — Launch the Job</div>
-<pre>cat &lt;&lt; JOBYAML | oc apply -f -
+  -n burner-node-density</code></pre>
+<p></p>
+<p>Verify:</p>
+<p></p>
+<pre><code>oc get configmap node-density-config -n burner-node-density</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Launch the Job</h3>
+<p></p>
+<pre><code>cat &lt;&lt; JOBYAML | oc apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -131,44 +288,85 @@ spec:
             name: node-density-config
         - name: workdir
           emptyDir: {}
-JOBYAML</pre>
-<div class="step-hdr">Step 7 — Stream logs</div>
-<pre>oc get pod -n burner-node-density -w
-# Wait for Running, then:
-oc logs -f job/kb-node-density -n burner-node-density</pre>
-<div class="step-hdr">Step 8 — Read results</div>
-<pre>INFO podLatency:
+JOBYAML</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Wait for the pod to start</h3>
+<p></p>
+<pre><code>oc get pod -n burner-node-density -w</code></pre>
+<p></p>
+<p>Wait for <code>Running</code> (init container copies config first — takes ~10 seconds). Then stream logs:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-node-density -n burner-node-density</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Watch the cluster while it runs</h3>
+<p></p>
+<p><strong>Tab 2 (Workloads → Pods):</strong> Watch pods appear and turn green.</p>
+<p></p>
+<p><strong>Tab 3 (Observe → Metrics):</strong> Paste this query:</p>
+<pre><code>sum(kube_pod_status_phase{phase="Running"})</code></pre>
+<p>Watch the number climb.</p>
+<p></p>
+<p><strong>Tab 4 (Compute → Nodes):</strong> Click any worker node — watch CPU spike as it handles the pod creation surge.</p>
+<p></p>
+<p><strong>What to say to a customer:</strong> <em>"Watch that number climb — each unit is a pod that just became Ready. We started 50 at once and the cluster handled every single one."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 10 — Read the results</h3>
+<p></p>
+<p>When the job completes, the final log lines show:</p>
+<p></p>
+<pre><code>INFO podLatency:
 INFO   P50:  2.3s
 INFO   P95:  5.1s
-INFO   P99:  8.4s    ← &gt; 15s may indicate bottleneck
-INFO Finished execution.</pre>
-<div class="step-hdr">Step 9 — Clean up</div>
-<pre>oc delete job kb-node-density -n burner-node-density 2&gt;/dev/null || true
+INFO   P99:  8.4s    ← &gt; 15s may indicate scheduler or etcd bottleneck
+INFO   Max: 12.1s
+INFO Finished execution. UUID: node-density-...</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 11 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-node-density -n burner-node-density 2&gt;/dev/null || true
 oc delete configmap node-density-config -n burner-node-density 2&gt;/dev/null || true
 oc delete project burner-node-density
 oc delete clusterrole kube-burner 2&gt;/dev/null || true
-oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</pre>
+oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</code></pre>
+<p></p>
+<p>Verify clean:</p>
+<p></p>
+<pre><code>oc get projects | grep burner-node-density
+# Should return nothing</code></pre>
+<p></p>
 <hr>
+<p></p>
 <h2>Expected results</h2>
-<table>
-<thead><tr><th>Cluster type</th><th>Expected P99</th><th>Max API rate</th></tr></thead>
-<tbody>
+<p></p>
+<tr><td>Cluster type</td><td>Expected P99 pod-ready latency</td><td>Max API server rate</td></tr>
 <tr><td>3-node SNO-adjacent</td><td>5–15 s</td><td>~200 req/s</td></tr>
 <tr><td>Standard 3-worker OCP</td><td>2–8 s</td><td>~400 req/s</td></tr>
 <tr><td>Large OCP (10+ workers)</td><td>2–6 s</td><td>~800 req/s</td></tr>
-</tbody>
-</table>
+<p></p>
+<blockquote>Values depend heavily on etcd disk speed and API server replica count.</blockquote>
+<p></p>
+<p>A P99 over 15 seconds typically means:</p>
+<li>etcd disk I/O is saturated</li>
+<li>API server is rate-limiting</li>
+<li>Worker nodes have insufficient CPU for kubelet to process the surge</li>
+<p></p>
 <hr>
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
-<tbody>
-<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 3 — create SA as separate command</td></tr>
-<tr><td>Pods stuck in <code>Pending: Too many pods</code></td><td>Reduce PODS_PER_NODE</td></tr>
-<tr><td><code>ImagePullBackOff</code> on kube-burner</td><td>quay.io unreachable — check pull secrets</td></tr>
-<tr><td>P99 &gt; 30s</td><td>Reduce PODS_PER_NODE — you found the ceiling</td></tr>
-</tbody>
-</table>
-<div class="footer">Kube-Burner v2.6.1 | Test 18 of 22 | Source: github.com/kube-burner/kube-burner</div>
-</body>
-</html>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 3 — create the SA as a separate command</td></tr>
+<tr><td>Pods stuck in <code>Pending: Too many pods</code></td><td>Node has hit pod limit — reduce <code>PODS_PER_NODE</code></td></tr>
+<tr><td><code>ImagePullBackOff</code> on kube-burner</td><td><code>quay.io</code> unreachable — check cluster pull secrets</td></tr>
+<tr><td>Job pod never starts</td><td>Check: <code>oc describe job kb-node-density -n burner-node-density</td><td>grep Events</code></td></tr>
+<tr><td><code>P99 > 30s</code></td><td>Reduce <code>PODS_PER_NODE</code> — you found the ceiling</td></tr>
+<p></p>
+</body></html>

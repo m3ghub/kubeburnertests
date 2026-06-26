@@ -1,66 +1,209 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Test 23: RHEL 9 VM Fleet Density</title>
-<style>
-body { font-family: 'Google Sans', Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #202124; line-height: 1.6; }
-h1 { color: #d93025; border-bottom: 3px solid #d93025; padding-bottom: 12px; }
-h2 { color: #1a73e8; margin-top: 32px; }
-h3 { color: #188038; margin-top: 24px; }
-blockquote { background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
-code { background: #f1f3f4; padding: 2px 6px; border-radius: 3px; font-family: 'Roboto Mono', monospace; font-size: 0.9em; }
-pre { background: #202124; color: #e8eaed; padding: 16px; border-radius: 8px; overflow-x: auto; }
-pre code { background: none; color: #e8eaed; padding: 0; }
-table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-th { background: #1a73e8; color: white; padding: 10px 14px; text-align: left; }
-td { padding: 10px 14px; border-bottom: 1px solid #e0e0e0; }
-tr:nth-child(even) { background: #f8f9fa; }
-.badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 600; margin: 2px; }
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 23: RHEL 9 VM Fleet Density — Enterprise Linux at Scale</h1>
-
-<p>
-<span class="badge">⭐⭐⭐⭐ Advanced</span>
-<span class="badge">⏱ 20–40 minutes</span>
-<span class="badge">🐧 RHEL 9</span>
-<span class="badge">OpenShift Virtualization required</span>
-</p>
-
-<blockquote>
-<strong>What it does:</strong> Creates N RHEL 9 virtual machines simultaneously and measures KubeVirt boot latency for enterprise Linux workloads<br>
-<strong>VM Image:</strong> <code>quay.io/containerdisks/rhel9:9.0</code> (public, no auth)
-</blockquote>
-
-<h2>What is this test?</h2>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐ Advanced  </blockquote>
+<blockquote><strong>Time to run:</strong> ~20–40 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Creates N RHEL 9 virtual machines simultaneously and measures KubeVirt boot latency for enterprise Linux workloads  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization 4.x, multi-node cluster, RHEL 9 golden image available  </blockquote>
+<blockquote><strong>VM Image:</strong> RHEL 9 golden image from <code>openshift-virtualization-os-images</code> (pre-loaded on most OCP Virt clusters)</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h2>What is this test? 🐧</h2>
+<p></p>
 <p>CirrOS boots in 5 seconds. Your customers are not running CirrOS. They are running <strong>RHEL</strong> — the same operating system that runs their databases, their middleware, their compliance-critical workloads.</p>
-<p>This test replaces the CirrOS disk with a real <strong>Red Hat Enterprise Linux 9</strong> container disk and asks the same question: how many enterprise Linux VMs can OpenShift Virtualization boot at the same time?</p>
-
+<p></p>
+<p>This test uses the <strong>RHEL 9 golden image</strong> that OpenShift Virtualization pre-loads on the cluster and asks: <em>how many enterprise Linux VMs can OpenShift Virtualization boot at the same time?</em></p>
+<p></p>
+<p>When you show this to a customer migrating from VMware: <em>"Every VM you see booting is RHEL 9 — the same OS running your production workloads right now. We're starting them all simultaneously. This is what your migration day looks like."</em></p>
+<p></p>
+<p><strong>What makes RHEL different from CirrOS:</strong></p>
+<li>Boots the full Linux kernel + systemd + cloud-init (~90 seconds vs 5 seconds)</li>
+<li>Uses cloud-init for user injection (realistic provisioning workflow)</li>
+<li>Needs 2 GiB RAM per VM (vs 512 MiB for CirrOS)</li>
+<li>Represents actual customer database, app server, and middleware workloads</li>
+<p></p>
+<hr>
+<p></p>
+<h2>What this test does</h2>
+<p></p>
+<pre><code>YOU                         CLUSTER
+ │
+ │  oc apply -f job.yaml
+ ▼
+┌──────────────────────────────────────────────────────────────┐
+│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.6.1)    │
+│                                                              │
+│  Creates N RHEL 9 VMs (running: true)                        │
+│  Each VM clones the RHEL 9 golden image via DataVolume       │
+│                                                              │
+│  RHEL 9 VM Boot Sequence:                                    │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  VM Created → DataVolume clone from golden image       │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  QEMU/KVM starts → kernel loads                       │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  systemd initializes → cloud-init runs                 │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  VM reaches Running (60–120 seconds typical)           │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│  Measures: vmiLatency P50/P95/P99                            │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h2>What it measures</h2>
+<p></p>
+<tr><td>Metric</td><td>Description</td><td>RHEL vs CirrOS</td></tr>
+<tr><td>VMI ready latency P50/P95/P99</td><td>Time from VM creation to Running phase</td><td>60–120 s vs 10–30 s</td></tr>
+<tr><td>virt-controller queue depth</td><td>How many VMs awaiting reconciliation</td><td>Higher with slower-booting VMs</td></tr>
+<tr><td>Node memory pressure</td><td>RAM consumed during concurrent boot</td><td>2 Gi per VM vs 512 Mi</td></tr>
+<tr><td>cloud-init completion</td><td>Time for initial user configuration</td><td>~30 s extra vs none</td></tr>
+<tr><td>virt-handler load</td><td>Reconcile loop load during QEMU startup</td><td>Higher sustained load</td></tr>
+<p></p>
+<hr>
+<p></p>
 <h2>Before you start — open these browser tabs</h2>
-<table>
-<tr><th>Tab</th><th>Where</th><th>What you watch</th></tr>
-<tr><td>Tab 1</td><td>Console (already open)</td><td>Web terminal</td></tr>
-<tr><td>Tab 2</td><td>Virtualization → VirtualMachines</td><td>VMs transitioning to Running</td></tr>
-<tr><td>Tab 3</td><td>Observe → Metrics</td><td>kubevirt_vmi_phase_count{phase="Running"}</td></tr>
-<tr><td>Tab 4</td><td>Observe → Dashboards → KubeVirt / Top Consumers</td><td>Memory per node</td></tr>
-</table>
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VMs transitioning to Running</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Observe → Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</td><td>Memory per node</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h2>Pre-flight checklist</h2>
+<p></p>
+<p>Run all of these before starting. Every check must pass.</p>
+<p></p>
+<h3>Check 1 — Logged in and cluster is reachable</h3>
+<p></p>
+<pre><code>oc whoami
+oc get nodes --no-headers | awk '{print $1, $2}'</code></pre>
+<p></p>
+<p>Expected: your username, and each node showing <code>Ready</code>.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Check 2 — OpenShift Virtualization is installed</h3>
+<p></p>
+<pre><code>oc get hyperconverged -A</code></pre>
+<p></p>
+<p>Expected: a row showing <code>PHASE: Deployed</code>. If empty — VM tests are not available on this cluster.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Check 3 — kube-burner image is pullable (required by every test)</h3>
+<p></p>
+<pre><code># Delete any leftover test pod
+oc delete pod kb-preflight -n default 2&gt;/dev/null || true
 
+# Create the test pod
+oc run kb-preflight \
+  -n default \
+  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --restart=Never \
+  --command -- kube-burner version</code></pre>
+<p></p>
+<p>Run this every 15 seconds until STATUS shows <code>Completed</code>:</p>
+<p></p>
+<pre><code>oc get pod kb-preflight -n default</code></pre>
+<p></p>
+<p>Then read the output:</p>
+<p></p>
+<pre><code>oc logs kb-preflight -n default | grep -i version
+# Expected: Version: v2.6.1</code></pre>
+<p></p>
+<p>Clean up:</p>
+<p></p>
+<pre><code>oc delete pod kb-preflight -n default 2&gt;/dev/null || true</code></pre>
+<p></p>
+<tr><td>STATUS</td><td>Meaning</td></tr>
+<tr><td><code>Completed</code></td><td>kube-burner image pullable — all tests will work</td></tr>
+<tr><td><code>ImagePullBackOff</code></td><td>quay.io/kube-burner is blocked — no tests can run until this is resolved</td></tr>
+<tr><td><code>Pending</code> / <code>ContainerCreating</code></td><td>Still pulling — wait 60 s and recheck</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h3>Check 4 — RHEL image source (pick the method that works on your cluster)</h3>
+<p></p>
+<p>Run the auto-detect script from <a href="00-preflight.md">00-preflight.md</a> to find out which method is available, or check manually:</p>
+<p></p>
+<pre><code># Method A check — OCP golden image (recommended)
+oc get datasource rhel9 -n openshift-virtualization-os-images 2&gt;/dev/null || \
+  oc get datasource rhel8 -n openshift-virtualization-os-images 2&gt;/dev/null || \
+  echo "No RHEL DataSource found — try Method B or C"
+
+# Method B check — quay.io/containerdisks (external registry)
+oc delete pod rhel-method-b -n default 2&gt;/dev/null || true
+oc run rhel-method-b -n default \
+  --image=quay.io/containerdisks/rhel9:9.0 --restart=Never --command -- true
+# Watch: oc get pod rhel-method-b -n default (Completed=works, ImagePullBackOff=blocked)
+# Cleanup: oc delete pod rhel-method-b -n default 2&gt;/dev/null || true
+
+# Method C check — HTTP QCOW2 (free RHEL-compatible, no registry needed)
+curl -s --connect-timeout 10 \
+  "https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/" \
+  -o /dev/null -w "HTTP egress: %{http_code}\n"
+# 200 = Method C works</code></pre>
+<p></p>
+<tr><td>Method</td><td>Works when</td><td>VM image</td></tr>
+<tr><td><strong>A</strong> — OCP golden image</td><td>OpenShift Virtualization golden images enabled</td><td>RHEL 9 (official Red Hat)</td></tr>
+<tr><td><strong>B</strong> — quay.io/containerdisks</td><td>External registry reachable</td><td>RHEL 9 containerDisk</td></tr>
+<tr><td><strong>C</strong> — QCOW2 via HTTP</td><td>HTTP egress available, no registry needed</td><td>AlmaLinux/Rocky/CentOS (free, 1:1 RHEL-compatible)</td></tr>
+<p></p>
+<p>See <a href="00-preflight.md">00-preflight.md</a> for full method details and VM template for each method.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Check 5 — Memory available</h3>
+<p></p>
+<pre><code># Each RHEL VM needs 2 GiB. Check what is available per node.
+oc adm top nodes</code></pre>
+<p></p>
+<p>For 6 VMs: need ~12 GiB free across worker nodes.</p>
+<p></p>
+<hr>
+<p></p>
 <h2>Step-by-step guide</h2>
-
+<p></p>
+<hr>
+<p></p>
 <h3>Step 1 — Open the web terminal</h3>
+<p></p>
 <pre><code>oc whoami
 oc get hyperconverged -A
-oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l</code></pre>
-
-<h3>Step 2 — Set your parameters</h3>
-<pre><code>VM_COUNT=6
-UUID="rhel-fleet-$(date +%s)"</code></pre>
-
-<h3>Step 3 — Create project and RBAC</h3>
+oc get datasource rhel9 -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p>All three must return valid output before continuing.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Choose how many RHEL VMs to create</h3>
+<p></p>
+<tr><td>Cluster size</td><td>Workers</td><td>Available RAM</td><td>Starter</td><td>Medium</td><td>Heavy</td></tr>
+<tr><td>Small</td><td>2–3</td><td>16–32 Gi per node</td><td>3 VMs</td><td>6 VMs</td><td>10 VMs</td></tr>
+<tr><td>Medium</td><td>4–6</td><td>32–64 Gi per node</td><td>6 VMs</td><td>12 VMs</td><td>20 VMs</td></tr>
+<tr><td>Large</td><td>6+</td><td>64+ Gi per node</td><td>10 VMs</td><td>20 VMs</td><td>40 VMs</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Create the project and RBAC</h3>
+<p></p>
 <pre><code>oc new-project burner-rhel-fleet
 oc create serviceaccount kube-burner -n burner-rhel-fleet</code></pre>
+<p></p>
 <pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -68,13 +211,19 @@ metadata:
   name: kube-burner
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, services, configmaps, secrets, nodes, events, serviceaccounts]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts, persistentvolumeclaims]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
     verbs: [get, list, watch, create, delete, update, patch]
   - apiGroups: [kubevirt.io]
     resources: [virtualmachines, virtualmachineinstances]
     verbs: [get, list, watch, create, delete, update, patch]
-  - apiGroups: [batch]
-    resources: [jobs]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes]
     verbs: [get, list, watch, create, delete, update, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -90,8 +239,29 @@ subjects:
     name: kube-burner
     namespace: burner-rhel-fleet
 EOF</code></pre>
-
-<h3>Step 4 — Write the config file</h3>
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-rhel-fleet
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Switch to Tab 2</h3>
+<p></p>
+<p>Go to <strong>Virtualization → VirtualMachines</strong>. Keep this tab visible — RHEL VMs take 60–120 seconds to boot, so the transition from <code>Provisioning</code> → <code>Starting</code> → <code>Running</code> will be slower and more sustained than CirrOS.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Set your parameters</h3>
+<p></p>
+<pre><code># Customize these values based on Step 2
+VM_COUNT=6
+UUID="rhel-fleet-$(date +%s)"</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Write the config file</h3>
+<p></p>
 <pre><code>cat &gt; /tmp/rhel-fleet-config.yml &lt;&lt; EOF
 global:
   gc: false
@@ -120,8 +290,90 @@ jobs:
         kind: VirtualMachine
         labelSelector: {kube-burner-job: create-rhel-vms}
 EOF</code></pre>
-
-<h3>Step 5 — Write the RHEL VM template</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Write the RHEL 9 VM template</h3>
+<p></p>
+<p>Choose the template that matches the method you confirmed in Check 4 of pre-flight.</p>
+<p></p>
+<hr>
+<p></p>
+<h4>Method A — OCP golden image (recommended)</h4>
+<p></p>
+<p>Uses the RHEL 9 DataSource already on the cluster. No external registry needed:</p>
+<p></p>
+<pre><code>cat &gt; /tmp/rhel-vm-template.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: rhel-fleet
+    os: rhel9
+    kube-burner-job: create-rhel-vms
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9                                   # Change to rhel8 if needed
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: rhel-fleet
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+              ssh_pwauth: true
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h4>Method B — quay.io/containerdisks (external registry)</h4>
+<p></p>
+<p>Use when Method A is not available but <code>quay.io/containerdisks</code> is reachable. No storage PVC needed — image loads as a memory-mapped containerDisk:</p>
+<p></p>
 <pre><code>cat &gt; /tmp/rhel-vm-template.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -172,13 +424,114 @@ spec:
               password: redhat123
               chpasswd:
                 expire: false
+              ssh_pwauth: true
 EOF</code></pre>
-
-<h3>Step 6 — Create ConfigMap and launch Job</h3>
+<p></p>
+<blockquote><strong>Note:</strong> If using Method B, remove <code>cdi.kubevirt.io</code> from the ClusterRole in Step 3 (no DataVolumes needed).</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h4>Method C — QCOW2 via HTTP (free RHEL-compatible, no registry needed)</h4>
+<p></p>
+<p>Use when Methods A and B are both unavailable. Imports a publicly downloadable RHEL-compatible QCOW2 image using CDI. Budget <strong>10–30 minutes</strong> for the import before VMs can boot.</p>
+<p></p>
+<p>Pick any of these free images (substitute the URL on the <code>http.url</code> line):</p>
+<p></p>
+<tr><td>Image</td><td>Demo value</td></tr>
+<tr><td>AlmaLinux 9</td><td>1:1 RHEL 9 binary compatible — perfect substitution for enterprise Linux demos</td></tr>
+<tr><td>Rocky Linux 9</td><td>Same — Red Hat founders' project</td></tr>
+<tr><td>CentOS Stream 9</td><td>RHEL upstream — shows the same kernel and userland</td></tr>
+<p></p>
+<pre><code># Set the URL for the image you want to use:
+RHEL_IMAGE_URL="https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
+# Alternatives:
+# RHEL_IMAGE_URL="https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2"
+# RHEL_IMAGE_URL="https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2"</code></pre>
+<p></p>
+<pre><code>cat &gt; /tmp/rhel-vm-template.yml &lt;&lt; EOF
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: rhel-fleet
+    os: rhel9
+    kube-burner-job: create-rhel-vms
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        source:
+          http:
+            url: "${RHEL_IMAGE_URL}"
+        storage:
+          resources:
+            requests:
+              storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app: rhel-fleet
+        os: rhel9
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+              ssh_pwauth: true
+EOF</code></pre>
+<p></p>
+<p>Watch the QCOW2 import progress before launching the main Job:</p>
+<p></p>
+<pre><code>oc get datavolume -n burner-rhel-fleet -w
+# Wait for PHASE: Succeeded before proceeding</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Create the ConfigMap</h3>
+<p></p>
 <pre><code>oc create configmap rhel-fleet-config \
   --from-file=config.yml=/tmp/rhel-fleet-config.yml \
   --from-file=rhel-vm-template.yml=/tmp/rhel-vm-template.yml \
-  -n burner-rhel-fleet</code></pre>
+  -n burner-rhel-fleet
+
+oc get configmap rhel-fleet-config -n burner-rhel-fleet</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Launch the Job</h3>
+<p></p>
 <pre><code>cat &lt;&lt; JOBYAML | oc apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -212,34 +565,102 @@ spec:
         - name: workdir
           emptyDir: {}
 JOBYAML</code></pre>
-
-<h3>Step 7 — Stream logs</h3>
-<pre><code>oc get pod -n burner-rhel-fleet -w
-oc logs -f job/kb-rhel-fleet -n burner-rhel-fleet</code></pre>
-
-<h3>Step 8 — Clean up</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 10 — Watch the pod start, then stream logs</h3>
+<p></p>
+<pre><code>oc get pod -n burner-rhel-fleet -w</code></pre>
+<p></p>
+<p>Wait for <code>Running</code> (the init container takes ~10 seconds). Then:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-rhel-fleet -n burner-rhel-fleet</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 11 — Watch the RHEL boot sequence in the console</h3>
+<p></p>
+<p><strong>Tab 2 (Virtualization → VirtualMachines):</strong> Watch VMs appear. They go through <code>Provisioning</code> (disk clone), then <code>Starting</code> (QEMU init), then <code>Running</code> (systemd ready).</p>
+<p></p>
+<blockquote><strong>This is the moment to narrate to a customer:</strong> <em>"Each one of those is a full RHEL 9 instance booting — kernel loading, systemd starting services, cloud-init running. This is what your actual server workloads look like running on OpenShift instead of bare metal or VMware."</em></blockquote>
+<p></p>
+<p><strong>Tab 3 (Observe → Metrics):</strong></p>
+<p></p>
+<pre><code>kubevirt_vmi_phase_count{phase="Running"}</code></pre>
+<p></p>
+<p>Watch the count climb from 0. It will be slower than CirrOS — that is expected and real.</p>
+<p></p>
+<p><strong>Tab 4 (Dashboards → KubeVirt Top Consumers):</strong> Watch memory consumption climbing as VMs allocate their 2 GiB per guest.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 12 — Read the results</h3>
+<p></p>
+<pre><code>INFO vmiLatency:
+INFO   P50:  72s
+INFO   P95:  98s
+INFO   P99:  118s   ← RHEL boots slower than CirrOS — this is normal
+INFO Finished execution. UUID: rhel-fleet-...</code></pre>
+<p></p>
+<tr><td>Metric</td><td>Good</td><td>Investigate</td></tr>
+<tr><td>P99 boot time</td><td>< 180 s</td><td>> 5 minutes</td></tr>
+<tr><td>All VMs reach Running</td><td>Yes</td><td>Any stuck in Scheduling or Provisioning</td></tr>
+<tr><td>Node memory pressure</td><td>< 85%</td><td>OOMKilled virt-launcher pods</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 13 — Scale up (optional)</h3>
+<p></p>
+<pre><code>oc delete configmap rhel-fleet-config -n burner-rhel-fleet 2&gt;/dev/null || true
+oc delete job kb-rhel-fleet -n burner-rhel-fleet 2&gt;/dev/null || true
+VM_COUNT=12
+UUID="rhel-fleet-r2-$(date +%s)"
+# Repeat Steps 6–11</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 14 — Clean up</h3>
+<p></p>
 <pre><code>oc delete job kb-rhel-fleet -n burner-rhel-fleet 2&gt;/dev/null || true
 oc delete configmap rhel-fleet-config -n burner-rhel-fleet 2&gt;/dev/null || true
 oc delete vm -A -l app=rhel-fleet 2&gt;/dev/null || true
+sleep 30
 oc delete project burner-rhel-fleet
 oc delete clusterrole kube-burner 2&gt;/dev/null || true
 oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</code></pre>
-
+<p></p>
+<p>Verify:</p>
+<p></p>
+<pre><code>oc get projects | grep burner-rhel-fleet
+oc get vm -A -l app=rhel-fleet 2&gt;/dev/null
+# Both should return nothing</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Expected results</h2>
-<table>
-<tr><th>Cluster size</th><th>VMs</th><th>Expected P99</th><th>Notes</th></tr>
-<tr><td>3 workers (16 Gi each)</td><td>6</td><td>90–150 s</td><td>May show memory pressure at &gt;8</td></tr>
+<p></p>
+<tr><td>Cluster size</td><td>VMs</td><td>Expected P99</td><td>Notes</td></tr>
+<tr><td>3 workers (16 Gi each)</td><td>6</td><td>90–150 s</td><td>May show memory pressure at >8</td></tr>
 <tr><td>3 workers (32 Gi each)</td><td>10</td><td>80–120 s</td><td>Good baseline</td></tr>
 <tr><td>6 workers (32 Gi each)</td><td>20</td><td>80–130 s</td><td>Spread across nodes</td></tr>
-</table>
-
+<p></p>
+<p>P99 over 5 minutes indicates node memory pressure or virt-controller bottleneck.</p>
+<p></p>
+<hr>
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<tr><th>Problem</th><th>Fix</th></tr>
-<tr><td>ImagePullBackOff on RHEL image</td><td>quay.io/containerdisks/rhel9:9.0 unreachable — check pull secrets</td></tr>
-<tr><td>VMs stuck in Scheduling</td><td>Not enough RAM — reduce VM_COUNT (each VM needs 2 Gi)</td></tr>
-<tr><td>serviceaccount "kube-burner" not found</td><td>Re-run Step 3 — create SA separately first</td></tr>
-<tr><td>P99 &gt; 5 minutes</td><td>QEMU startup bottleneck — check oc adm top nodes for pressure</td></tr>
-</table>
-</body>
-</html>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td><code>datasource "rhel9" not found</code> (Method A)</td><td>Run <code>oc get datasource -n openshift-virtualization-os-images</code> to see available RHEL versions. Use <code>rhel8</code> if <code>rhel9</code> is absent.</td></tr>
+<tr><td><code>ImagePullBackOff</code> on RHEL image (Method B)</td><td><code>quay.io/containerdisks/rhel9:9.0</code> blocked — switch to Method A or C</td></tr>
+<tr><td>DataVolume stuck in <code>ImportScheduled</code> (Method C)</td><td>HTTP egress blocked — check <code>oc describe datavolume -n burner-rhel-fleet</code> for network error</td></tr>
+<tr><td>DataVolume import taking > 30 min (Method C)</td><td>QCOW2 download is slow (file is 600 MB – 2 GB) — wait or try a closer mirror</td></tr>
+<tr><td>VMs stuck in <code>Provisioning</code> > 10 min</td><td>CDI is cloning — check <code>oc get datavolume -n burner-rhel-fleet</code> for status</td></tr>
+<tr><td><code>cannot create resource "datavolumes"</code></td><td>ClusterRole missing <code>cdi.kubevirt.io</code> — re-apply Step 3 RBAC (not needed for Method B)</td></tr>
+<tr><td>VMs stuck in <code>Scheduling</code></td><td>Not enough RAM — reduce <code>VM_COUNT</code> (each VM needs 2 Gi)</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 3 — create SA before applying ClusterRoleBinding</td></tr>
+<tr><td>virt-launcher pods <code>OOMKilled</code></td><td>Worker node out of memory — reduce <code>VM_COUNT</code></td></tr>
+<tr><td>P99 > 5 minutes</td><td>QEMU startup bottleneck — check <code>oc adm top nodes</code> for pressure</td></tr>
+<tr><td><code>ImagePullBackOff</code> on kube-burner job pod</td><td>Run pre-flight Check 1 — <code>quay.io/kube-burner</code> must be reachable</td></tr>
+<p></p>
+</body></html>

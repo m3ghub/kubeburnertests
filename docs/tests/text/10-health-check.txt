@@ -1,316 +1,235 @@
-================================================================================
-                             KUBE-BURNER TEST GUIDE                             
-                                10-HEALTH-CHECK                                 
-================================================================================
-  Kube-Burner v2.6.1 | Product: OpenShift / Kubernetes
-  Source: github.com/kube-burner/kube-burner
-================================================================================
+Test 10: Health Check — Is the Cluster Feeling OK?
 
+> Difficulty: ⭐ Beginner — start here!  
+> Time to run: ~1 minute  
+> What it does: Quickly checks that the Kubernetes cluster is reachable and the API server is responding before you run any other test
 
-================================================================================
-               TEST 10: HEALTH CHECK — IS THE CLUSTER FEELING OK?               
-================================================================================
+> ⚡ Pre-flight required: Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see 00-preflight.md (00-preflight.md).
 
+---
 
+What is this test? 🏥
 
-  NOTE: Difficulty: ⭐ Beginner — start here!  
-
-
-  NOTE: Time to run: ~1 minute  
-
-
-  NOTE: What it does: Quickly checks that the Kubernetes cluster is reachable and the API server is responding before you run any other test
-
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  WHAT IS THIS TEST? 🏥
---------------------------------------------------------------------------------
-
-
-Before a doctor performs surgery, they check that the patient is healthy enough
-for the operation.
-Before you run a big performance test, you should check that your cluster is
-healthy enough to be tested!
+Before a doctor performs surgery, they check that the patient is healthy enough for the operation.  
+Before you run a big performance test, you should check that your cluster is healthy enough to be tested!
 
 Health Check does a quick examination:
-  * Can kube-burner reach the API server?
-  * Is the API server responding to requests?
-  * Are the basic Kubernetes APIs working?
+- Can kube-burner reach the API server?
+- Is the API server responding to requests?
+- Are the basic Kubernetes APIs working?
 
-Think of it as the "hello, are you there?" test. It's the first thing you
-should run whenever you log into a new cluster.
+Think of it as the "hello, are you there?" test. It's the first thing you should run whenever you log into a new cluster.
 
---------------------------------------------------------------------------------
+---
 
+What does it check?
 
---------------------------------------------------------------------------------
-  WHAT DOES IT CHECK?
---------------------------------------------------------------------------------
+`
+kube-burner health-check
 
+  ✅ Can connect to the API server?
+  ✅ Kubernetes API version is readable?
+  ✅ Node list is accessible?
+  ✅ Namespace list is accessible?
 
+  If all pass → "Cluster is healthy" 🟢
+  If any fail → "Check failed" 🔴 (fix before running other tests)
+`
 
-    kube-burner health-check
-    
-      ✅ Can connect to the API server?
-      ✅ Kubernetes API version is readable?
-      ✅ Node list is accessible?
-      ✅ Namespace list is accessible?
-    
-      If all pass → "Cluster is healthy" 🟢
-      If any fail → "Check failed" 🔴 (fix before running other tests)
+---
 
+Before you start ✅
 
---------------------------------------------------------------------------------
+- [ ] kube-burner installed (kube-burner version)
+- [ ] Logged in (oc whoami or oc config current-context)
+- [ ] 1 minute of time
 
+---
 
---------------------------------------------------------------------------------
-  BEFORE YOU START ✅
---------------------------------------------------------------------------------
-
-
-  [ ] kube-burner installed (kube-burner version)
-  [ ] Logged in (oc whoami or oc config current-context)
-  [ ] 1 minute of time
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  METHOD A — RUN LOCALLY (IF YOU HAVE LOCAL NETWORK ACCESS)
---------------------------------------------------------------------------------
-
+Method A — Run locally (if you have local network access)
 
 If you can reach the cluster from your laptop:
 
-
-    kube-burner health-check
-
+`bash
+kube-burner health-check
+`
 
 Expected output when the cluster is healthy:
 
+`
+time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
+time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
+`
 
-    time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
-    time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
+If you see an error like Forbidden or connection refused, your local machine cannot reach the cluster API server. Use Method B instead.
 
+---
 
-If you see an error like Forbidden or connection refused, your local machine
-cannot reach the cluster API server. Use Method B instead.
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  METHOD B — RUN AS AN IN-CLUSTER JOB (RECOMMENDED FOR OPENSHIFT)
---------------------------------------------------------------------------------
-
-
+Method B — Run as an in-cluster Job (recommended for OpenShift)
 
 Step 1 — Create the namespace
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+> Do this first — every other step depends on it.
 
-
-  NOTE: Do this first — every other step depends on it.
-
-
-
-    oc new-project burner-health
-
+`bash
+oc new-project burner-health
+`
 
 You should see:
+`
+Now using project "burner-health" on server "https://api.<your-cluster>:6443"
+`
 
-    Now using project "burner-health" on server "https://api.<your-cluster>:6443"
-
-
-
-  NOTE: OpenShift only: Never use kube- at the start of the name — it is reserved by the system and will be rejected.
-
-
+> OpenShift only: Never use kube- at the start of the name — it is reserved by the system and will be rejected.
 
 Step 2 — Set up RBAC
-~~~~~~~~~~~~~~~~~~~~
 
-
-Every test needs a ServiceAccount, ClusterRole, and ClusterRoleBinding. Run all
-three commands — they are safe to re-run if any already exist.
+Every test needs a ServiceAccount, ClusterRole, and ClusterRoleBinding. Run all three commands — they are safe to re-run if any already exist.
 
 2a — Create the ServiceAccount in this namespace:
 
-
-    oc create serviceaccount kube-burner -n burner-health \
-      --dry-run=client -o yaml | oc apply -f -
-
+`bash
+oc create serviceaccount kube-burner -n burner-health \
+  --dry-run=client -o yaml | oc apply -f -
+`
 
 2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):
 
+> These are applied inline below — no local file needed. Safe to re-run at any time.
 
-  NOTE: These are applied inline below — no local file needed. Safe to re-run at any time.
-
-
-
-    oc apply -f - <<'EOF'
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
-    metadata:
-      name: kube-burner
-    rules:
-      - apiGroups: [""]
-        resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [apps]
-        resources: [deployments, replicasets, statefulsets, daemonsets]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [batch]
-        resources: [jobs]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [networking.k8s.io]
-        resources: [networkpolicies, ingresses]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [kubevirt.io]
-        resources: [virtualmachines, virtualmachineinstances]
-        verbs: [get, list, watch, create, delete, update, patch]
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRoleBinding
-    metadata:
-      name: kube-burner
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: ClusterRole
-      name: kube-burner
-    subjects:
-      - kind: ServiceAccount
-        name: kube-burner
-        namespace: burner-health
-    EOF
-
+`bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-health
+EOF
+`
 
 2c — Add this namespace to the ClusterRoleBinding:
 
+`bash
+oc patch clusterrolebinding kube-burner \
+  --type=json \
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-health"}}]' 2>/dev/null || true
+`
 
-    oc patch clusterrolebinding kube-burner \
-      --type=json \
-      -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-health"}}]' 2>/dev/null || true
-
-
-
-  NOTE: The || true at the end means this command will not fail if the namespace is already listed. It is safe to run every time.
-
+> The || true at the end means this command will not fail if the namespace is already listed. It is safe to run every time.
 
 Verify all three are in place before continuing:
 
-
-    oc get serviceaccount kube-burner -n burner-health
-    oc get clusterrole kube-burner
-    oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
-
+`bash
+oc get serviceaccount kube-burner -n burner-health
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
+`
 
 The last command should include burner-health in the output.
 
-
 Step 3 — Run the health check as a Job
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-    cat <<'EOF' | oc apply -f -
-    apiVersion: batch/v1
-    kind: Job
-    metadata:
-      name: kb-health-check
-      namespace: burner-health
+`bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-health-check
+  namespace: burner-health
+spec:
+  backoffLimit: 0
+  template:
     spec:
-      backoffLimit: 0
-      template:
-        spec:
-          serviceAccountName: kube-burner
-          restartPolicy: Never
-          containers:
-            - name: kube-burner
-              image: quay.io/kube-burner/kube-burner:v2.6.1
-              workingDir: /tmp
-              command:
-                - kube-burner
-                - health-check
-    EOF
-
-
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /tmp
+          command:
+            - kube-burner
+            - health-check
+EOF
+`
 
 Step 4 — Read the result
-~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-    oc logs job/kb-health-check -n burner-health
-
+`bash
+oc logs job/kb-health-check -n burner-health
+`
 
 Healthy cluster output:
 
-
-    time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
-    time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
-
+`
+time="2026-04-23 14:00:01" level=info msg="Checking for Cluster Health"
+time="2026-04-23 14:00:01" level=info msg="Cluster is healthy."
+`
 
 Check the exit code:
 
-
-    oc get pod -l job-name=kb-health-check -n burner-health \
-      -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'
-    # 0 = healthy ✅
-    # non-zero = something is wrong ❌
-
-
+`bash
+oc get pod -l job-name=kb-health-check -n burner-health \
+  -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'
+0 = healthy ✅
+non-zero = something is wrong ❌
+`
 
 Step 5 — Clean up
-~~~~~~~~~~~~~~~~~
 
+`bash
+oc delete job kb-health-check -n burner-health
+oc delete project burner-health
+`
 
+---
 
-    oc delete job kb-health-check -n burner-health
-    oc delete project burner-health
+What to do if the health check fails 🔴
 
+| Error message | What it means | What to do |
+|---|---|---|
+| connection refused | Cannot reach the API server | Check your oc login / kubeconfig |
+| Forbidden | No permission to read cluster info | Check RBAC — apply ocp-rbac.yaml |
+| no such host | DNS resolution failed | Check network / VPN connection |
+| certificate verify failed | TLS certificate issue | Try --insecure-skip-tls-verify=true (test only!) |
+| timeout | Cluster is overloaded or unreachable | Wait and try again; check cluster status with your admin |
 
---------------------------------------------------------------------------------
+---
 
-
---------------------------------------------------------------------------------
-  WHAT TO DO IF THE HEALTH CHECK FAILS 🔴
---------------------------------------------------------------------------------
-
-
-
-  +---------------------------+--------------------------------------+----------------------------------------------------------+
-  | Error message             | What it means                        | What to do                                               |
-  +---------------------------+--------------------------------------+----------------------------------------------------------+
-  | connection refused        | Cannot reach the API server          | Check your oc login / kubeconfig                         |
-  | Forbidden                 | No permission to read cluster info   | Check RBAC — apply ocp-rbac.yaml                         |
-  | no such host              | DNS resolution failed                | Check network / VPN connection                           |
-  | certificate verify failed | TLS certificate issue                | Try --insecure-skip-tls-verify=true (test only!)         |
-  | timeout                   | Cluster is overloaded or unreachable | Wait and try again; check cluster status with your admin |
-  +---------------------------+--------------------------------------+----------------------------------------------------------+
-
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  HEALTH CHECK AS PART OF YOUR ROUTINE ⭐
---------------------------------------------------------------------------------
-
+Health check as part of your routine ⭐
 
 Make a habit of running the health check:
-  1. Before any benchmark — know the cluster was healthy at the start
-  2. After a benchmark — confirm the cluster returned to healthy state
-  3. When something seems wrong — first diagnostic step
+1. Before any benchmark — know the cluster was healthy at the start
+2. After a benchmark — confirm the cluster returned to healthy state
+3. When something seems wrong — first diagnostic step
 
---------------------------------------------------------------------------------
+---
 
-Next test: 11 — Check Alerts — verify that no Prometheus alerts are firing
-
-================================================================================
-  END OF DOCUMENT — 10-health-check
-  Reference: docs/tests/markdown/10-health-check.md
-================================================================================
+Next test: 11 — Check Alerts (11-check-alerts.md) — verify that no Prometheus alerts are firing

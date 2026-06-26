@@ -1,77 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 01: Pod Density — How Fast Can Pods Start?</title>
-  <!--
-    GOOGLE DOCS IMPORT:
-    1. Go to https://docs.google.com
-    2. File > Open > Upload > select this file
-  -->
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  h4{font-size:11pt;color:#3c4043;margin-top:14px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}
-  tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 01: Pod Density — How Fast Can Pods Start?</h1>
-<br>
-<div class="note"><strong>Difficulty:</strong> ⭐ Beginner  </div>
-<div class="note"><strong>Time to run:</strong> ~5 minutes  </div>
-<div class="note"><strong>What it does:</strong> Creates lots of pods as fast as possible and measures how long they take to become ready</div>
-<br>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐ Beginner  </blockquote>
+<blockquote><strong>Time to run:</strong> ~5 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Creates lots of pods as fast as possible and measures how long they take to become ready</blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What is this test? 🚀</h2>
-<br>
+<p></p>
 <p>Imagine you are a chef in a restaurant. A hundred customers walk in at the same time and all order food.  </p>
 <p><strong>How fast can your kitchen get every single meal ready?</strong></p>
-<br>
+<p></p>
 <p>That is exactly what the Pod Density test does — but for your Kubernetes cluster.  </p>
 <p>It asks the cluster to start <strong>many pods all at once</strong> and measures how long it takes every single one to be up and running.</p>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What does it measure?</h2>
-<br>
-<table>
-<thead><tr><th>Metric</th><th>What it means</th></tr></thead><tbody>
+<p></p>
+<tr><td>Metric</td><td>What it means</td></tr>
 <tr><td><strong>PodScheduled</strong></td><td>How long until the scheduler assigned the pod to a node</td></tr>
 <tr><td><strong>ContainersReady</strong></td><td>How long until all containers inside the pod were running</td></tr>
 <tr><td><strong>Ready</strong></td><td>How long until the pod was 100% ready to serve traffic</td></tr>
 <tr><td><strong>Initialized</strong></td><td>How long until the init containers (if any) finished</td></tr>
-</tbody></table>
-<br>
+<p></p>
 <p>At the end you get <strong>percentile numbers</strong> (50th, 90th, 99th) so you know the worst-case timing, not just the average.</p>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>How it works</h2>
-<br>
-<pre>
-  YOU                CLUSTER
+<p></p>
+<pre><code>  YOU                CLUSTER
    │
    │  oc apply -f job.yaml
    ▼
@@ -85,72 +53,60 @@
  │                         🟢  🟢  🟢  🟢  🟢  🟢  🟢  🟢  │
  │  3. Measures latency for EVERY pod                      │
  │  4. Prints results (99th percentile timing)             │
- └─────────────────────────────────────────────────────────┘
-</pre>
-<br>
+ └─────────────────────────────────────────────────────────┘</code></pre>
+<p></p>
 <p><strong>Pod lifecycle (what happens to each pod):</strong></p>
-<pre>
-Created ──► Pending ──► Scheduled ──► ContainerCreating ──► Running ──► Ready ✅
+<pre><code>Created ──► Pending ──► Scheduled ──► ContainerCreating ──► Running ──► Ready ✅
     t=0        t+1s        t+2s              t+3s              t+4s      t+5s
                  ↑            ↑                                            ↑
            PodScheduled  (image pull)                                   Ready
-           measured here                                              measured here
-</pre>
-<br>
+           measured here                                              measured here</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Before you start ✅</h2>
-<br>
+<p></p>
 <p>Check all boxes before running:</p>
-<br>
+<p></p>
 <li>[ ] kube-burner is installed (<code>kube-burner version</code> works)</li>
 <li>[ ] You are logged into your cluster (<code>oc whoami</code> or <code>oc get nodes</code>)</li>
 <li>[ ] You have cluster-admin permissions</li>
 <li>[ ] The RBAC has been applied (<code>oc get clusterrole kube-burner</code>)</li>
 <li>[ ] Your cluster has at least 1 worker node with free CPU and memory</li>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Step-by-step guide</h2>
-<br>
-<div class="step-hdr">Step 1 — Create the namespace</div>
-<br>
-<pre>
-oc new-project burner-pod-density
-</pre>
-<br>
+<p></p>
+<h3>Step 1 — Create the namespace</h3>
+<p></p>
+<pre><code>oc new-project burner-pod-density</code></pre>
+<p></p>
 <p>You should see:</p>
-<pre>
-Now using project "burner-pod-density" on server "..."
-</pre>
-<br>
-<div class="note"><strong>Remember:</strong> Never use <code>kube-</code> at the start of the name in OpenShift — it is reserved!</div>
-<br>
+<pre><code>Now using project "burner-pod-density" on server "..."</code></pre>
+<p></p>
+<blockquote><strong>Remember:</strong> Never use <code>kube-</code> at the start of the name in OpenShift — it is reserved!</blockquote>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 2 — Apply RBAC (do this once per cluster)</div>
-<br>
-<pre>
-oc apply -f examples/ocp-rbac.yaml
-</pre>
-<br>
+<p></p>
+<h3>Step 2 — Apply RBAC (do this once per cluster)</h3>
+<p></p>
+<pre><code>oc apply -f examples/ocp-rbac.yaml</code></pre>
+<p></p>
 <p>You should see:</p>
-<pre>
-serviceaccount/kube-burner created
+<pre><code>serviceaccount/kube-burner created
 clusterrole.rbac.authorization.k8s.io/kube-burner created
-clusterrolebinding.rbac.authorization.k8s.io/kube-burner created
-</pre>
-<br>
-<div class="note">Already applied? That is fine — oc will say <code>unchanged</code> and nothing breaks.</div>
-<br>
+clusterrolebinding.rbac.authorization.k8s.io/kube-burner created</code></pre>
+<p></p>
+<blockquote>Already applied? That is fine — oc will say <code>unchanged</code> and nothing breaks.</blockquote>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 3 — Create the workload config</div>
-<br>
+<p></p>
+<h3>Step 3 — Create the workload config</h3>
+<p></p>
 <p>Create <code>pod-density-config.yml</code>:</p>
-<br>
-<pre>
-cat &gt; /tmp/pod-density-config.yml &lt;&lt; 'EOF'
+<p></p>
+<pre><code>cat &gt; /tmp/pod-density-config.yml &lt;&lt; 'EOF'
 global:
   gc: true
   gcMetrics: false
@@ -170,13 +126,11 @@ jobs:
     waitWhenFinished: true
     podWait: true
     maxWaitTimeout: 5m
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <p>Create <code>pod.yml</code> (the pod template):</p>
-<br>
-<pre>
-cat &gt; /tmp/pod.yml &lt;&lt; 'EOF'
+<p></p>
+<pre><code>cat &gt; /tmp/pod.yml &lt;&lt; 'EOF'
 kind: Pod
 apiVersion: v1
 metadata:
@@ -192,28 +146,23 @@ spec:
         requests:
           cpu: 1m
           memory: 10Mi
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 4 — Package config into a ConfigMap</div>
-<br>
-<pre>
-oc create configmap pod-density-config \
+<p></p>
+<h3>Step 4 — Package config into a ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap pod-density-config \
   --from-file=config.yml=/tmp/pod-density-config.yml \
   --from-file=pod.yml=/tmp/pod.yml \
-  -n burner-pod-density
-</pre>
+  -n burner-pod-density</code></pre>
 <p>  --from-file=pod.yml=pod.yml \</p>
 <p>  -n burner-pod-density</p>
-<pre>
-
+<pre><code>
 ---
 
 ### Step 5 — Run the test!
-
-</pre>
+</code></pre>
 <p>cat <<'EOF' | oc apply -f -</p>
 <p>apiVersion: batch/v1</p>
 <p>kind: Job</p>
@@ -227,64 +176,57 @@ oc create configmap pod-density-config \
 <p>      serviceAccountName: kube-burner</p>
 <p>      restartPolicy: Never</p>
 <p>      initContainers:</p>
-<li>name: copy-config</li>
+<p>        - name: copy-config</p>
 <p>          image: quay.io/kube-burner/kube-burner:v2.6.1</p>
 <p>          command: [sh, -c, "cp /config-src/* /config/"]</p>
 <p>          volumeMounts:</p>
-<li>{name: config-src, mountPath: /config-src}</li>
-<li>{name: workdir,    mountPath: /config}</li>
+<p>            - {name: config-src, mountPath: /config-src}</p>
+<p>            - {name: workdir,    mountPath: /config}</p>
 <p>      containers:</p>
-<li>name: kube-burner</li>
+<p>        - name: kube-burner</p>
 <p>          image: quay.io/kube-burner/kube-burner:v2.6.1</p>
 <p>          workingDir: /config</p>
 <p>          command:</p>
-<li>kube-burner</li>
-<li>init</li>
-<li>-c</li>
-<li>/config/config.yml</li>
-<li>--uuid=pod-density-test-001</li>
+<p>            - kube-burner</p>
+<p>            - init</p>
+<p>            - -c</p>
+<p>            - /config/config.yml</p>
+<p>            - --uuid=pod-density-test-001</p>
 <p>          volumeMounts:</p>
-<li>{name: workdir, mountPath: /config}</li>
+<p>            - {name: workdir, mountPath: /config}</p>
 <p>      volumes:</p>
-<li>name: config-src</li>
+<p>        - name: config-src</p>
 <p>          configMap:</p>
 <p>            name: pod-density-config</p>
-<li>name: workdir</li>
+<p>        - name: workdir</p>
 <p>          emptyDir: {}</p>
 <p>EOF</p>
-<pre>
-
+<pre><code>
 ---
 
 ### Step 6 — Watch it run
 
 Open a **second terminal** and watch the pods being created:
-
-</pre>
+</code></pre>
 <p>oc get pods -n burner-pod-density -w</p>
-<pre>
-
+<pre><code>
 In your **first terminal**, stream the kube-burner logs:
-
-</pre>
+</code></pre>
 <p>oc logs -f job/kb-pod-density -n burner-pod-density</p>
-<pre>
-
+<pre><code>
 ---
 
 ### Step 7 — Read the results 🎉
 
 When the test finishes you will see something like this:
-
-</pre>
+</code></pre>
 <p>time="..." level=info msg="Triggering job: pod-density"</p>
 <p>time="..." level=info msg="burner-pod-density: 50/50 pods ready"</p>
 <p>time="..." level=info msg="pod-density: PodScheduled    50th: 0ms    99th: 500ms    max: 800ms"</p>
 <p>time="..." level=info msg="pod-density: ContainersReady 50th: 1500ms  99th: 2200ms   max: 2400ms"</p>
 <p>time="..." level=info msg="pod-density: Ready           50th: 1500ms  99th: 2200ms   max: 2400ms"</p>
 <p>time="..." level=info msg="Finished execution. UUID: pod-density-test-001"</p>
-<pre>
-
+<pre><code>
 **How to read these numbers:**
 
 | Number | Meaning |
@@ -300,43 +242,8 @@ When the test finishes you will see something like this:
 ---
 
 ### Step 8 — Clean up
-
-</pre>
+</code></pre>
 <p>oc delete job kb-pod-density -n burner-pod-density</p>
 <p>oc delete configmap pod-density-config -n burner-pod-density</p>
 <p>oc delete project burner-pod-density</p>
-<pre>
-
----
-
-## Troubleshooting
-
-| Problem | What it means | Fix |
-|---|---|---|
-| Pods stuck in `Pending` for a long time | Not enough resources on nodes | Reduce `replicas` from 50 to 10 |
-| `permission denied` in logs | Log file write error | Check that `initContainer` copied config to `emptyDir` |
-| `events is forbidden` | RBAC missing events access | Re-apply `examples/ocp-rbac.yaml` |
-| `Too many pods` on SNO | 250-pod node limit | Reduce `replicas` to 10-15 max |
-| Test completes but numbers seem high | Nodes are under heavy load | Run when cluster is quiet |
-
----
-
-## Try it yourself — challenge 🏆
-
-Once the basic test works, try changing the number of pods and see how it affects the results:
-
-1. Change `replicas: 50` to `replicas: 100` — does it get slower?
-2. Change `qps: 20` to `qps: 5` — does spreading the creation over more time help?
-3. Run the test twice in a row — are the results consistent?
-
----
-
-*Next test: [02 — Node Density](02-node-density.md) — test how many Deployments your nodes can handle*
-
-</pre>
-<div class="footer">
-  Kube-Burner v2.6.1 &mdash; Test Guide &mdash; 01-pod-density<br>
-  Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
-</div>
-</body>
-</html>
+</body></html>

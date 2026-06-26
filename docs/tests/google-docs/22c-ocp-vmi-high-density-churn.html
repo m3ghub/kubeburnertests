@@ -1,139 +1,118 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 22C: OCP VMI High-Density Multi-OS Churn</title>
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .danger{border-left:4px solid #d93025;background:#fce8e6;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-  details{border:1px solid #dadce0;border-radius:4px;padding:4px 12px;margin:10px 0}
-  summary{cursor:pointer;font-weight:bold;padding:6px 0}
-  .bignum{font-size:28pt;font-weight:bold;color:#1a73e8;margin:0 6px}
-  </style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 22C: OCP VMI High-Density Multi-OS Churn</h1>
-<div class="note"><strong>Difficulty:</strong> &#9733;&#9733;&#9733;&#9733;&#9733; Expert &#8212; Production Scale</div>
-<div class="note"><strong>Time to run:</strong> 60&#8211;120 minutes</div>
-<div class="note"><strong>What it does:</strong> Same 4-round progressive structure as Test 22B, but with 10&#215; the VM density &#8212; 6 / 16 / 40 / 80 total VMs per round</div>
-<div class="note"><strong>Requires:</strong> OpenShift Virtualization 4.x, 6+ worker nodes, ~400 Gi free storage</div>
-<div class="warn"><strong>Run Test 22B first.</strong> This test uses the same structure as 22B. Complete 22B before pushing to production scale.</div>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐⭐ Expert — Production Scale  </blockquote>
+<blockquote><strong>Time to run:</strong> 60–120 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Same 4-round progressive structure as Test 22B, but with 10× the VM density — 6 / 16 / 40 / 80 total VMs per round — turning up the heat to production-scale load across two operating systems and two resource profiles  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization 4.x, 6+ worker nodes, RHEL9 and Fedora DataSources ready, ~400 Gi free storage  </blockquote>
+<blockquote><strong>Binary:</strong> <code>kube-burner</code> v2.6.1 — runs as an in-cluster Job, nothing to install locally</blockquote>
+<p></p>
+<blockquote><strong>⚡ Run Test 22B first:</strong> This test uses the same structure as 22B. Complete 22B successfully so you know the cluster handles the base workload before pushing it to production scale.</blockquote>
+<p></p>
 <hr>
-
+<p></p>
 <h2>What is this test?</h2>
-<p>Test 22C is the same 4-round progressive design as Test 22B &#8212; same OS types, same resource profiles per VM, same churn structure. The only change is the number of VMs per round:</p>
-
-<table>
-<thead><tr><th></th><th>22B (warm-up)</th><th>22C (production scale)</th></tr></thead>
-<tbody>
+<p></p>
+<p>Test 22C is the same 4-round progressive design as Test 22B — same OS types, same resource profiles per VM, same churn structure. The only change is the number of VMs per round:</p>
+<p></p>
+<tr><td></td><td>22B (warm-up)</td><td>22C (production scale)</td></tr>
 <tr><td>Round 1 (cirros)</td><td>6 VMs</td><td>6 VMs</td></tr>
 <tr><td>Round 2 (RHEL9)</td><td>4 VMs</td><td><strong>16 VMs</strong></td></tr>
 <tr><td>Round 3 (RHEL9 + Fedora)</td><td>3 + 3 = 6 VMs</td><td><strong>20 + 20 = 40 VMs</strong></td></tr>
-<tr><td>Round 4 (heavy mixed)</td><td>4 + 4 = 8 VMs</td><td><strong>40 + 40 = 80 VMs</strong></td></tr>
-</tbody>
-</table>
-
-<h3>Resource demand at peak (Round 4)</h3>
-<table>
-<thead><tr><th>Resource</th><th>Per VM</th><th>Total (80 VMs)</th></tr></thead>
-<tbody>
-<tr><td>vCPU</td><td>2</td><td><strong>160 vCPU</strong></td></tr>
-<tr><td>RAM</td><td>4 Gi</td><td><strong>320 Gi</strong></td></tr>
-<tr><td>Storage</td><td>30 Gi</td><td><strong>2.4 Ti</strong></td></tr>
-</tbody>
-</table>
-
-<div class="tip"><strong>What to say:</strong> &#8220;We didn&#8217;t just run a handful of VMs and call it a day. We ran 80 virtual machines across two operating systems, cycled them out and back twice, and the cluster came out the other side with boot times within 20% of the baseline, no stuck VMs, and a virt-controller memory footprint that returned to near where it started.&#8221;</div>
+<tr><td>Round 4 (RHEL9 + Fedora heavy)</td><td>4 + 4 = 8 VMs</td><td><strong>40 + 40 = 80 VMs</strong></td></tr>
+<p></p>
+<p>This is intentionally hard. At peak (Round 4), the cluster must run 80 VMs simultaneously — each requesting 2 vCPU and 4 Gi RAM — and churn them in batches of 40.</p>
+<p></p>
+<p><strong>Resource demand at peak (Round 4):</strong></p>
+<p></p>
+<tr><td>Resource</td><td>Per VM</td><td>Total (80 VMs)</td></tr>
+<tr><td>vCPU</td><td>2</td><td>160 vCPU</td></tr>
+<tr><td>RAM</td><td>4 Gi</td><td>320 Gi</td></tr>
+<tr><td>Storage</td><td>30 Gi</td><td>2.4 Ti</td></tr>
+<p></p>
+<p><strong>What this proves to a customer:</strong> <em>"We didn't just run a handful of VMs and call it a day. We ran 80 virtual machines across two operating systems, cycled them out and back twice, and the cluster came out the other side with boot times within 20% of the baseline, no stuck VMs, and a virt-controller memory footprint that returned to near where it started. That is what a production-ready OpenShift Virtualization cluster looks like."</em></p>
+<p></p>
 <hr>
-
+<p></p>
 <h2>Round breakdown</h2>
-<table>
-<thead><tr><th>Round</th><th>OS</th><th>VMs</th><th>vCPU</th><th>RAM each</th><th>Churn cycles</th><th>Approx time</th></tr></thead>
-<tbody>
-<tr><td>R01</td><td>cirros</td><td>6</td><td>1</td><td>512Mi</td><td>3</td><td>~5 min</td></tr>
-<tr><td>R02</td><td>RHEL9</td><td>16</td><td>1</td><td>2Gi</td><td>3</td><td>~25 min</td></tr>
-<tr><td>R03</td><td>RHEL9 + Fedora</td><td>20 + 20 = 40</td><td>1</td><td>2Gi</td><td>3</td><td>~40 min</td></tr>
-<tr><td>R04</td><td>RHEL9 + Fedora</td><td>40 + 40 = 80</td><td>2</td><td>4Gi</td><td>2</td><td>~50 min</td></tr>
-</tbody>
-</table>
+<p></p>
+<tr><td>Round</td><td>OS</td><td>VMs</td><td>vCPU each</td><td>RAM each</td><td>Churn cycles</td><td>Approximate duration</td></tr>
+<tr><td>R01</td><td>cirros</td><td>6</td><td>1</td><td>512Mi</td><td>3</td><td>~5 minutes</td></tr>
+<tr><td>R02</td><td>RHEL9</td><td>16</td><td>1</td><td>2Gi</td><td>3</td><td>~25 minutes</td></tr>
+<tr><td>R03</td><td>RHEL9 + Fedora</td><td>20 + 20 = 40</td><td>1</td><td>2Gi</td><td>3</td><td>~40 minutes</td></tr>
+<tr><td>R04</td><td>RHEL9 + Fedora</td><td>40 + 40 = 80</td><td>2</td><td>4Gi</td><td>2</td><td>~50 minutes</td></tr>
+<p></p>
 <hr>
-
+<p></p>
 <h2>What it measures</h2>
-<table>
-<thead><tr><th>Metric</th><th>What it means</th></tr></thead>
-<tbody>
-<tr><td><strong>VMIRunning P99</strong></td><td>Boot latency at full fleet size</td></tr>
-<tr><td><strong>VMReady P99</strong></td><td>Cloud-init readiness at scale</td></tr>
-<tr><td><strong>virt-controller RSS</strong></td><td>Memory footprint &#8212; watch for drift between rounds</td></tr>
-<tr><td><strong>Delete duration</strong></td><td>Time to remove 20 or 40 VMs at once</td></tr>
-<tr><td><strong>CDI controller load</strong></td><td><em>New in 22C:</em> becomes visible at 40&#8211;80 concurrent PVC clones</td></tr>
-<tr><td><strong>Stuck VM count</strong></td><td>Must always be zero &#8212; any stuck VM at this scale is a critical finding</td></tr>
-</tbody>
-</table>
+<p></p>
+<tr><td>Metric</td><td>What it means</td></tr>
+<tr><td><strong>VMIRunning P99</strong></td><td>Time from VM creation to Running state across the full fleet</td></tr>
+<tr><td><strong>VMReady P99</strong></td><td>Time to full readiness including cloud-init at scale</td></tr>
+<tr><td><strong>virt-controller RSS</strong></td><td>Memory footprint under sustained load — watch for drift between rounds</td></tr>
+<tr><td><strong>Delete duration</strong></td><td>Time to remove 20 or 40 VMs at once — tests the cleanup pipeline at scale</td></tr>
+<tr><td><strong>Scheduler latency</strong></td><td>How long before pods are placed — visible as gap between creation and VMIRunning</td></tr>
+<tr><td><strong>Stuck VM count</strong></td><td>Must always be zero — any stuck VM at this scale is a critical finding</td></tr>
+<p></p>
 <hr>
-
-<h2>Browser tabs to open</h2>
-<table>
-<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
-<tbody>
-<tr><td>Tab 1</td><td>Console (terminal)</td><td>Streaming kube-burner logs</td></tr>
-<tr><td>Tab 2</td><td>Virtualization &#8594; VirtualMachines</td><td>VM count climbing to 16, 40, 80</td></tr>
-<tr><td>Tab 3</td><td>Observe &#8594; Metrics</td><td><code>process_resident_memory_bytes{pod=~"virt-controller.*"}</code></td></tr>
-<tr><td>Tab 4</td><td>Observe &#8594; Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
-<tr><td>Tab 5</td><td>Observe &#8594; Metrics</td><td><code>rate(process_cpu_seconds_total{pod=~"cdi-deployment.*"}[2m]) * 1000</code></td></tr>
-</tbody>
-</table>
-<div class="tip"><strong>Tab 5 is new for 22C.</strong> At 40&#8211;80 concurrent PVC clones, the CDI controller load becomes measurable. In 22B the clone count was too low to see. Adding this query now gives you a live view of the image pipeline under pressure.</div>
+<p></p>
+<h2>Before you start — open these browser tabs</h2>
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Console (terminal)</td><td>Streaming kube-burner logs — watch job transitions</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VM count climbing to 40, then 80 — and falling during churn</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Observe → Metrics</td><td><code>process_resident_memory_bytes{pod=~"virt-controller.*"}</code></td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
+<tr><td><strong>Tab 5</strong></td><td>Observe → Metrics</td><td><code>rate(process_cpu_seconds_total{pod=~"virt-handler.<em>"}[2m]) </em> 1000</code></td></tr>
+<p></p>
 <hr>
-
+<p></p>
 <h2>Pre-flight checklist</h2>
-<ul>
-<li>Test 22B completed successfully</li>
-<li>Logged into the OpenShift web console</li>
-<li>OpenShift Virtualization installed (<code>oc get hyperconverged -A</code>)</li>
-<li>Cluster-admin permissions</li>
-<li>RHEL9 DataSource ready</li>
-<li>Fedora DataSource ready</li>
-<li>At least 6 worker nodes</li>
-<li>~400 Gi free storage across workers</li>
-<li>~320 Gi free RAM across workers</li>
-</ul>
-<pre>oc get datasource rhel9 fedora -n openshift-virtualization-os-images
-oc get nodes -l node-role.kubernetes.io/worker \
-  -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory'</pre>
+<p></p>
+<li>[ ] Test 22B completed successfully</li>
+<li>[ ] Logged into the OpenShift web console</li>
+<li>[ ] OpenShift Virtualization installed (<code>oc get hyperconverged -A</code>)</li>
+<li>[ ] Cluster-admin permissions</li>
+<li>[ ] RHEL9 DataSource ready: <code>oc get datasource rhel9 -n openshift-virtualization-os-images</code></li>
+<li>[ ] Fedora DataSource ready: <code>oc get datasource fedora -n openshift-virtualization-os-images</code></li>
+<li>[ ] At least 6 worker nodes</li>
+<li>[ ] ~400 Gi free storage for PVC clones (80 VMs × 30 Gi each at peak, spread across rounds)</li>
+<li>[ ] ~320 Gi free RAM across workers (80 VMs × 4 Gi at peak)</li>
+<p></p>
+<blockquote><strong>Storage note:</strong> PVC clones are created and deleted per churn cycle. Peak concurrent storage is one full round at a time — not 80 VMs × 30 Gi all at once — but provision conservatively.</blockquote>
+<p></p>
 <hr>
-
-<div class="step-hdr">Step 1 &#8212; Verify the cluster</div>
-<pre>oc whoami
+<p></p>
+<h2>Step-by-step guide</h2>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 1 — Verify the cluster</h3>
+<p></p>
+<pre><code>oc whoami
 oc get nodes -l node-role.kubernetes.io/worker --no-headers | wc -l
 oc get hyperconverged -A
-oc get datasource rhel9 fedora -n openshift-virtualization-os-images
-oc get nodes -l node-role.kubernetes.io/worker \
-  -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory'</pre>
-<p>Both DataSources must show <strong>READY: True</strong>. Verify RAM headroom before continuing.</p>
-
-<div class="step-hdr">Step 2 &#8212; Create project and RBAC</div>
-<pre>oc new-project burner-test22c
-oc create serviceaccount kube-burner -n burner-test22c</pre>
-<pre>oc apply -f - &lt;&lt;'EOF'
+oc get datasource rhel9 fedora -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p>Also check allocatable RAM per node to estimate headroom:</p>
+<p></p>
+<pre><code>oc get nodes -l node-role.kubernetes.io/worker \
+  -o custom-columns='NODE:.metadata.name,RAM:.status.allocatable.memory'</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Create the project and RBAC</h3>
+<p></p>
+<pre><code>oc new-project burner-test22c
+oc create serviceaccount kube-burner -n burner-test22c</code></pre>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -183,16 +162,21 @@ subjects:
   - kind: ServiceAccount
     name: kube-burner
     namespace: burner-test22c
-EOF</pre>
-<pre>oc get serviceaccount kube-burner -n burner-test22c
+EOF</code></pre>
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-test22c
 oc get clusterrole kube-burner-test22c
-oc get clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring</pre>
-
-<div class="step-hdr">Step 3 &#8212; Write the 6 VM template files</div>
-<p>Structurally identical to 22B &#8212; only the <code>app: test22c-churn</code> label differs. Replica counts live in the config file, not here.</p>
-
-<h3>File 1 &#8212; vm-r1-cirros.yml</h3>
-<pre>cat &gt; /tmp/vm-r1-cirros.yml &lt;&lt; 'EOF'
+oc get clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Write the 6 VM template files</h3>
+<p></p>
+<p>These are identical in structure to 22B. The only difference is the <code>app: test22c-churn</code> label and the VM name prefix. Replica counts live in the config file, not in the templates.</p>
+<p></p>
+<p><strong>File 1 — <code>vm-r1-cirros.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r1-cirros.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -231,10 +215,11 @@ spec:
         - name: containerdisk
           containerDisk:
             image: quay.io/kubevirt/cirros-registry-disk-demo:latest
-EOF</pre>
-
-<h3>File 2 &#8212; vm-r2-rhel9.yml</h3>
-<pre>cat &gt; /tmp/vm-r2-rhel9.yml &lt;&lt; 'EOF'
+EOF</code></pre>
+<p></p>
+<p><strong>File 2 — <code>vm-r2-rhel9.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r2-rhel9.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -293,10 +278,11 @@ spec:
             userData: |
               #cloud-config
               hostname: r2-rhel9-{{.Iteration}}-{{.Replica}}
-EOF</pre>
-
-<h3>File 3 &#8212; vm-r3-rhel9.yml</h3>
-<pre>cat &gt; /tmp/vm-r3-rhel9.yml &lt;&lt; 'EOF'
+EOF</code></pre>
+<p></p>
+<p><strong>File 3 — <code>vm-r3-rhel9.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r3-rhel9.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -355,10 +341,11 @@ spec:
             userData: |
               #cloud-config
               hostname: r3-rhel9-{{.Iteration}}-{{.Replica}}
-EOF</pre>
-
-<h3>File 4 &#8212; vm-r3-fedora.yml</h3>
-<pre>cat &gt; /tmp/vm-r3-fedora.yml &lt;&lt; 'EOF'
+EOF</code></pre>
+<p></p>
+<p><strong>File 4 — <code>vm-r3-fedora.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r3-fedora.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -417,10 +404,11 @@ spec:
             userData: |
               #cloud-config
               hostname: r3-fedora-{{.Iteration}}-{{.Replica}}
-EOF</pre>
-
-<h3>File 5 &#8212; vm-r4-rhel9.yml (2 vCPU / 4Gi)</h3>
-<pre>cat &gt; /tmp/vm-r4-rhel9.yml &lt;&lt; 'EOF'
+EOF</code></pre>
+<p></p>
+<p><strong>File 5 — <code>vm-r4-rhel9.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r4-rhel9.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -479,10 +467,11 @@ spec:
             userData: |
               #cloud-config
               hostname: r4-rhel9-{{.Iteration}}-{{.Replica}}
-EOF</pre>
-
-<h3>File 6 &#8212; vm-r4-fedora.yml (2 vCPU / 4Gi)</h3>
-<pre>cat &gt; /tmp/vm-r4-fedora.yml &lt;&lt; 'EOF'
+EOF</code></pre>
+<p></p>
+<p><strong>File 6 — <code>vm-r4-fedora.yml</code></strong></p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-r4-fedora.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -541,28 +530,519 @@ spec:
             userData: |
               #cloud-config
               hostname: r4-fedora-{{.Iteration}}-{{.Replica}}
-EOF</pre>
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Get the main config file</h3>
+<p></p>
+<p><strong>Option A — Download from repo (recommended):</strong></p>
+<p></p>
+<pre><code>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/22c-ocp-vmi-high-density-churn"
 
-<div class="step-hdr">Step 4 &#8212; Get the main config file</div>
-<div class="tip"><strong>Option A &#8212; Download from repo (recommended)</strong></div>
-<pre>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/22c-ocp-vmi-high-density-churn"
+curl --fail -sL "${BASE}/test22c-churn-config.yml" -o /tmp/test22c-churn-config.yml</code></pre>
+<p></p>
+<p>Verify (must not print <code>404</code> or <code><!DOCTYPE</code>):</p>
+<p></p>
+<pre><code>head -3 /tmp/test22c-churn-config.yml
+# Expected:
+# global:
+#   gc: false</code></pre>
+<p></p>
+<p><details></p>
+<p><summary><strong>Option B — Paste manually (air-gapped / private repo)</strong></summary></p>
+<p></p>
+<pre><code>cat &gt; /tmp/test22c-churn-config.yml &lt;&lt; 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
 
-curl --fail -sL "${BASE}/test22c-churn-config.yml" -o /tmp/test22c-churn-config.yml</pre>
-<p>Verify (must print <code>global:</code> on the first line):</p>
-<pre>head -1 /tmp/test22c-churn-config.yml</pre>
-<div class="note">The key difference from 22B is the replica counts: R01=6 (same), R02=16, R03=20+20, R04=40+40. Everything else in the config structure is identical.</div>
+jobs:
+  # ============================================================
+  # ROUND 1: CirrOS only — 6 VMs, 1vCPU/512Mi, 3 churn cycles
+  # Same as 22B: containerDisk baseline, warms up control plane
+  # Confirms image cache and scheduler are ready before real OS
+  # ============================================================
+  - name: r01-cre-cirros
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
 
-<div class="step-hdr">Step 5 &#8212; Verify all 7 files exist</div>
-<pre>ls -lh /tmp/test22c-churn-config.yml \
+  - name: r01-c1-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-cre-cirros
+
+  - name: r01-c1-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-c2-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c1-cre
+
+  - name: r01-c2-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-c3-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-c2-cre
+
+  - name: r01-c3-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 10m
+    objects:
+      - objectTemplate: vm-r1-cirros.yml
+        replicas: 6
+
+  - name: r01-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r01
+
+  # ============================================================
+  # ROUND 2: RHEL9 only — 16 VMs, 1vCPU/2Gi, 3 churn cycles
+  # 4x the density of 22B Round 2 — PVC clone pressure begins
+  # CDI controller load visible; memory graphs step up sharply
+  # ============================================================
+  - name: r02-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c1-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-cre-rhel9
+
+  - name: r02-c1-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c2-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c1-cre
+
+  - name: r02-c2-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-c3-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-c2-cre
+
+  - name: r02-c3-cre
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-r2-rhel9.yml
+        replicas: 16
+
+  - name: r02-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r02
+
+  # ============================================================
+  # ROUND 3: RHEL9 + Fedora mixed — 20+20=40 VMs, 1vCPU/2Gi, 3 cycles
+  # Mixed OS at scale: CDI handles 40 concurrent PVC clones
+  # Dashboards clearly moving; both OS rows visible in console
+  # ============================================================
+  - name: r03-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c1-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-rhel9
+
+  - name: r03-c1-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c1-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-cre-fedora
+
+  - name: r03-c1-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c2-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-rhel9
+
+  - name: r03-c2-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c2-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c1-cre-fedora
+
+  - name: r03-c2-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-c3-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-rhel9
+
+  - name: r03-c3-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-rhel9.yml
+        replicas: 20
+
+  - name: r03-c3-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-c2-cre-fedora
+
+  - name: r03-c3-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-r3-fedora.yml
+        replicas: 20
+
+  - name: r03-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          round: r03
+
+  # ============================================================
+  # ROUND 4: RHEL9 + Fedora heavy — 40+40=80 VMs, 2vCPU/4Gi, 2 cycles
+  # Maximum pressure: 80 VMs total, ~320Gi RAM, 160 vCPU requested
+  # Full production-scale wall test — this IS the ceiling probe
+  # ============================================================
+  - name: r04-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-c1-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-rhel9
+
+  - name: r04-c1-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-c1-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-cre-fedora
+
+  - name: r04-c1-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-c2-del-rhel9
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-rhel9
+
+  - name: r04-c2-cre-rhel9
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: false
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-rhel9.yml
+        replicas: 40
+
+  - name: r04-c2-del-fedora
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-c1-cre-fedora
+
+  - name: r04-c2-cre-fedora
+    namespace: burner-test22c
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-r4-fedora.yml
+        replicas: 40
+
+  - name: r04-final-del
+    namespace: burner-test22c
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: test22c-churn
+EOF</code></pre>
+<p></p>
+<p></details></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Verify all 7 files exist</h3>
+<p></p>
+<pre><code>ls -lh /tmp/test22c-churn-config.yml \
         /tmp/vm-r1-cirros.yml \
         /tmp/vm-r2-rhel9.yml \
         /tmp/vm-r3-rhel9.yml \
         /tmp/vm-r3-fedora.yml \
         /tmp/vm-r4-rhel9.yml \
-        /tmp/vm-r4-fedora.yml</pre>
-
-<div class="step-hdr">Step 6 &#8212; Create the ConfigMap</div>
-<pre>oc create configmap test22c-churn-config \
+        /tmp/vm-r4-fedora.yml</code></pre>
+<p></p>
+<p>All 7 must show non-zero file sizes before continuing.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Create the ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap test22c-churn-config \
   --from-file=config.yml=/tmp/test22c-churn-config.yml \
   --from-file=vm-r1-cirros.yml=/tmp/vm-r1-cirros.yml \
   --from-file=vm-r2-rhel9.yml=/tmp/vm-r2-rhel9.yml \
@@ -572,27 +1052,46 @@ curl --fail -sL "${BASE}/test22c-churn-config.yml" -o /tmp/test22c-churn-config.
   --from-file=vm-r4-fedora.yml=/tmp/vm-r4-fedora.yml \
   -n burner-test22c
 
-oc get configmap test22c-churn-config -n burner-test22c</pre>
-<p>Expected: <code>configmap/test22c-churn-config created</code> with <strong>DATA: 7</strong>.</p>
-
-<div class="step-hdr">Step 7 &#8212; Switch to Tab 2 (Virtualization &#8594; VirtualMachines)</div>
-<p>Filter to <code>burner-test22c</code>. The visual experience is different from 22B &#8212; the VM count climbs much higher:</p>
-<ul>
-<li><strong>R01:</strong> 6 VMs &#8212; same fast cirros baseline</li>
-<li><strong>R02:</strong> 16 VMs &#8212; list fills up, all RHEL9</li>
-<li><strong>R03:</strong> 40 VMs &#8212; dense list, both RHEL9 and Fedora names visible. Churn drops 20 at a time.</li>
-<li><strong>R04:</strong> 80 VMs &#8212; screen fills. Churn drops 40 at a time — highly visible.</li>
-</ul>
-
-<div class="step-hdr">Step 8 &#8212; Set up Observe queries</div>
-<pre>process_resident_memory_bytes{pod=~"virt-controller.*"}</pre>
-<pre>kubevirt_vmi_phase_count{phase="Running"}</pre>
-<pre>rate(process_cpu_seconds_total{pod=~"virt-handler.*"}[2m]) * 1000</pre>
-<pre>rate(process_cpu_seconds_total{pod=~"cdi-deployment.*"}[2m]) * 1000</pre>
-<div class="tip">The CDI query is new for 22C. At 40&#8211;80 concurrent PVC clones, the image cloning pipeline becomes measurable. This is something you cannot show in 22B &#8212; it only appears at this density.</div>
-
-<div class="step-hdr">Step 9 &#8212; Launch the kube-burner job</div>
-<pre>UUID="test22c-$(date +%s)"
+oc get configmap test22c-churn-config -n burner-test22c</code></pre>
+<p></p>
+<p>Expected: <code>configmap/test22c-churn-config created</code> with <code>DATA: 7</code>.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Switch to Tab 2</h3>
+<p></p>
+<p>Go to <strong>Virtualization → VirtualMachines</strong>, filter to <code>burner-test22c</code>. What you'll see is visually different from 22B — the VM count climbs much higher before the churn cycles start dropping it:</p>
+<p></p>
+<li><strong>R01:</strong> 6 VMs — same as 22B, fast cirros baseline</li>
+<li><strong>R02:</strong> 16 VMs — first real jump, all RHEL9, PVC clones for each</li>
+<li><strong>R03:</strong> VM count climbs to 40 — 20 RHEL9 and 20 Fedora visible simultaneously. The mix makes the list visually diverse.</li>
+<li><strong>R04:</strong> VM count reaches 80 — the screen fills up. When churn starts, batches of 40 vanish and reappear.</li>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Set up Observe queries</h3>
+<p></p>
+<p>Open <strong>Observe → Metrics</strong> now so baseline is captured from the start of the run.</p>
+<p></p>
+<pre><code># virt-controller memory — should plateau under load and recover after each round
+process_resident_memory_bytes{pod=~"virt-controller.*"}</code></pre>
+<p></p>
+<pre><code># Running VM count — shows the sawtooth pattern of each churn cycle
+kubevirt_vmi_phase_count{phase="Running"}</code></pre>
+<p></p>
+<pre><code># virt-handler CPU per node — spikes during each batch delete+recreate
+rate(process_cpu_seconds_total{pod=~"virt-handler.*"}[2m]) * 1000</code></pre>
+<p></p>
+<pre><code># CDI controller — watch for clone queue pressure during R03 and R04
+rate(process_cpu_seconds_total{pod=~"cdi-deployment.*"}[2m]) * 1000</code></pre>
+<p></p>
+<blockquote><strong>The CDI query is new for 22C.</strong> At 40–80 PVC clones running simultaneously, CDI will become visible in the metrics. In 22B the clone count was low enough that CDI was barely measurable.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Launch the kube-burner job</h3>
+<p></p>
+<pre><code>UUID="test22c-$(date +%s)"
 echo "UUID: $UUID"
 
 cat &lt;&lt; JOBYAML | oc apply -f -
@@ -627,77 +1126,108 @@ spec:
             name: test22c-churn-config
         - name: workdir
           emptyDir: {}
-JOBYAML</pre>
-
-<div class="step-hdr">Step 10 &#8212; Stream logs</div>
-<pre>oc get pod -n burner-test22c -w</pre>
-<pre>oc logs -f job/kb-test22c-churn -n burner-test22c</pre>
-
-<div class="step-hdr">Step 11 &#8212; What to say at each phase</div>
-<p><strong>During R01 (6 cirros):</strong> &#8220;Same control-plane warm-up as 22B. Baseline established.&#8221;</p>
-<p><strong>During R02 (16 RHEL9):</strong> &#8220;Now we&#8217;re at 16 real RHEL9 VMs &#8212; 480 Gi of clone operations running in parallel. Watch Tab 2 as they all try to reach Running state simultaneously.&#8221;</p>
-<p><strong>During R03 (40 mixed):</strong> &#8220;Two operating systems, 40 VMs total. Watch the CDI query &#8212; at this scale the clone controller becomes visible in the metrics. You only see this at real production density.&#8221;</p>
-<p><strong>During R04 (80 VMs):</strong> &#8220;Full wall test &#8212; 80 VMs, 160 vCPU, 320 Gi RAM. When churn starts, 40 VMs disappear and 40 new ones clone and boot. If virt-controller RSS returns to near-baseline after R04, this cluster is production-ready.&#8221;</p>
-
-<div class="step-hdr">Step 12 &#8212; What good looks like</div>
-<table>
-<thead><tr><th>Metric</th><th>Healthy</th><th>Investigate</th></tr></thead>
-<tbody>
-<tr><td>R01 VMIRunning P99</td><td>&lt; 30s</td><td>&gt; 60s</td></tr>
-<tr><td>R02 VMIRunning P99</td><td>&lt; 90s</td><td>&gt; 5 minutes</td></tr>
-<tr><td>R03 VMIRunning P99</td><td>&lt; 120s</td><td>&gt; 8 minutes</td></tr>
-<tr><td>R04 VMIRunning P99</td><td>&lt; 180s</td><td>&gt; 12 minutes</td></tr>
-<tr><td>virt-controller RSS peak</td><td>&lt; 400 MiB</td><td>&gt; 800 MiB</td></tr>
-<tr><td>virt-controller RSS after test</td><td>Returns toward baseline</td><td>Keeps climbing</td></tr>
-<tr><td>Stuck VMs at end of any round</td><td>0</td><td>Any</td></tr>
+JOBYAML</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 10 — Stream logs</h3>
+<p></p>
+<pre><code>oc get pod -n burner-test22c -w</code></pre>
+<p></p>
+<p>Wait for <code>Running</code>, then stream:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-test22c-churn -n burner-test22c</code></pre>
+<p></p>
+<p>Each round transition is clearly logged:</p>
+<p></p>
+<pre><code>INFO Triggering job: r01-cre-cirros        ← Round 1: 6 cirros
+INFO Job r01-cre-cirros took 24s
+...
+INFO Triggering job: r02-cre-rhel9         ← Round 2: 16 RHEL9
+INFO Job r02-cre-rhel9 took ~8m
+...
+INFO Triggering job: r03-cre-rhel9         ← Round 3: 40 mixed
+INFO Triggering job: r03-cre-fedora
+...
+INFO Triggering job: r04-cre-rhel9         ← Round 4: 80 heavy
+INFO Triggering job: r04-cre-fedora
+INFO VMIRunning P99=...
+INFO Finished execution with UUID: test22c-...</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 11 — What to say at each phase</h3>
+<p></p>
+<p><strong>During R01 (6 cirros):</strong></p>
+<p><em>"Same control-plane warm-up as Test 22B. Six cirros VMs, three cycles. Fast and clean — establishes the baseline."</em></p>
+<p></p>
+<p><strong>During R02 (16 RHEL9 appearing):</strong></p>
+<p><em>"Now we're at 16 real RHEL9 VMs, each cloning a 30 Gi disk. That's 480 Gi of clone operations running in parallel. Watch Tab 2 as they all try to reach Running state at the same time."</em></p>
+<p></p>
+<p><strong>During R03 (count climbing to 40):</strong></p>
+<p><em>"Two operating systems, 40 VMs total. In Tab 4 you can see the Running count reaching 40 and then dropping by 20 when we start a churn cycle. Watch the CDI query in Tab 5 — at this scale the clone controller becomes visible in the metrics."</em></p>
+<p></p>
+<p><strong>During R04 (count reaching 80):</strong></p>
+<p><em>"This is the full wall test. 80 VMs, 160 vCPU, 320 Gi RAM. When churn starts, 40 VMs disappear and 40 new ones have to clone their disks and boot. Watch virt-controller RSS in Tab 3 — if it plateaus and returns to near-baseline after R04, the memory management is solid under production-scale load."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 12 — What good looks like</h3>
+<p></p>
+<tr><td>Metric</td><td>Healthy</td><td>Investigate</td></tr>
+<tr><td>R01 VMIRunning P99</td><td>< 30s</td><td>> 60s</td></tr>
+<tr><td>R02 VMIRunning P99</td><td>< 90s</td><td>> 5 minutes</td></tr>
+<tr><td>R03 VMIRunning P99</td><td>< 120s</td><td>> 8 minutes</td></tr>
+<tr><td>R04 VMIRunning P99</td><td>< 180s</td><td>> 12 minutes</td></tr>
+<tr><td>virt-controller RSS at R04 peak</td><td>< 400 MiB</td><td>> 800 MiB</td></tr>
+<tr><td>virt-controller RSS post-test</td><td>Returns toward baseline</td><td>Keeps climbing</td></tr>
+<tr><td>Stuck VMs</td><td>0 at end of any round</td><td>Any</td></tr>
 <tr><td>Final VM count</td><td>0</td><td>Any remaining</td></tr>
-</tbody>
-</table>
-<div class="note">Thresholds are higher than 22B because at 16&#8211;80 VMs, CDI clone queue depth and scheduler pack time both increase. Graceful scaling is the pass criteria &#8212; not matching 22B&#8217;s absolute numbers.</div>
-
-<div class="step-hdr">Step 13 &#8212; Clean up</div>
-<pre>oc delete job kb-test22c-churn -n burner-test22c 2>/dev/null || true
-oc delete vm -l app=test22c-churn -n burner-test22c 2>/dev/null || true
-oc delete configmap test22c-churn-config -n burner-test22c 2>/dev/null || true
+<p></p>
+<blockquote><strong>Why thresholds are higher than 22B:</strong> At 16–80 VMs, CDI clone queue depth and scheduler pack time both increase. Boot times scaling with fleet size is expected — what matters is that they scale gracefully, not exponentially.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 13 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-test22c-churn -n burner-test22c 2&gt;/dev/null || true
+oc delete vm -l app=test22c-churn -n burner-test22c 2&gt;/dev/null || true
+oc delete configmap test22c-churn-config -n burner-test22c 2&gt;/dev/null || true
 oc delete project burner-test22c
-oc delete clusterrole kube-burner-test22c 2>/dev/null || true
-oc delete clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring 2>/dev/null || true</pre>
-<pre>oc get projects | grep burner-test22c
-oc get vm -A 2>/dev/null | grep test22c</pre>
+oc delete clusterrole kube-burner-test22c 2&gt;/dev/null || true
+oc delete clusterrolebinding kube-burner-test22c kube-burner-test22c-monitoring 2&gt;/dev/null || true</code></pre>
+<p></p>
+<p>Verify clean:</p>
+<p></p>
+<pre><code>oc get projects | grep burner-test22c
+oc get vm -A 2&gt;/dev/null | grep test22c
+# Both should return nothing</code></pre>
+<p></p>
 <hr>
-
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
-<tbody>
-<tr><td>R04 VMs stuck in Pending</td><td>Insufficient RAM &#8212; reduce R04 replicas from 40 to 20</td></tr>
-<tr><td>R03/R04 VMIRunning timeout</td><td>CDI clone queue saturated &#8212; <code>oc get datavolumes -A</code> for stuck clones</td></tr>
-<tr><td>R02 taking &gt; 30 minutes</td><td>First run &#8212; RHEL9 not cached on nodes; subsequent rounds faster</td></tr>
-<tr><td>no space left on device</td><td>Storage class full &#8212; reduce replicas or audit with <code>oc get pvc -A</code></td></tr>
-<tr><td>ConfigMap already exists</td><td><code>oc delete configmap test22c-churn-config -n burner-test22c</code></td></tr>
-<tr><td>R04 job times out at 60m</td><td>Cluster undersized for 80 VMs &#8212; reduce R04 replicas</td></tr>
-</tbody>
-</table>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td>R04 VMs stuck in Pending</td><td>Insufficient RAM — reduce R04 replicas from 40 to 20 in the config, or verify node headroom with <code>oc describe node</code></td></tr>
+<tr><td>R03/R04 VMIRunning timeout</td><td>CDI clone queue is saturated — check <code>oc get datavolumes -A</code> for stuck clones</td></tr>
+<tr><td>R02 taking > 30 minutes</td><td>RHEL9 golden image not cached on nodes — first run is always slower; subsequent rounds benefit from caching</td></tr>
+<tr><td><code>no space left on device</code></td><td>Storage class is full — <code>oc get pvc -A</code> to audit usage, reduce replicas</td></tr>
+<tr><td>ConfigMap already exists on rerun</td><td><code>oc delete configmap test22c-churn-config -n burner-test22c</code> then recreate</td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 2</td></tr>
+<tr><td>R04 never completes</td><td><code>maxWaitTimeout: 60m</code> is the hard limit — if your cluster is undersized for 80 VMs, R04 will time out. Reduce replicas.</td></tr>
+<p></p>
 <hr>
-
+<p></p>
 <h2>How 22B and 22C fit together</h2>
-<table>
-<thead><tr><th></th><th>22B</th><th>22C</th></tr></thead>
-<tbody>
+<p></p>
+<tr><td></td><td>22B</td><td>22C</td></tr>
 <tr><td>Purpose</td><td>Prove the structure works; warm up the cluster</td><td>Push to production-scale density</td></tr>
 <tr><td>Total VMs per run</td><td>6 / 6 / 6 / 8</td><td><strong>6 / 16 / 40 / 80</strong></td></tr>
-<tr><td>Duration</td><td>20&#8211;30 min</td><td>60&#8211;120 min</td></tr>
+<tr><td>Duration</td><td>20–30 min</td><td>60–120 min</td></tr>
 <tr><td>Cluster size</td><td>3+ workers</td><td><strong>6+ workers</strong></td></tr>
 <tr><td>CDI visible in metrics?</td><td>No</td><td><strong>Yes</strong></td></tr>
-<tr><td>Customer narrative</td><td>&#8220;The foundation is solid&#8221;</td><td>&#8220;Production-scale &#8212; and it held&#8221;</td></tr>
-</tbody>
-</table>
-
-<div class="footer">
-  Test 22C follows Test 22B. Together they form the complete progressive churn sequence:
-  22B confirms structure, 22C confirms scale.
-  <br><br>
-  Kube-Burner v2.6.1 | OpenShift Virtualization | github.com/kube-burner/kube-burner
-</div>
-</body>
-</html>
+<tr><td>Customer narrative</td><td>"The foundation is solid"</td><td>"Production-scale — and it held"</td></tr>
+<p></p>
+<p><em>Test 22C follows Test 22B. Together they form the complete progressive churn sequence: 22B confirms structure, 22C confirms scale.</em></p>
+<p></p>
+</body></html>

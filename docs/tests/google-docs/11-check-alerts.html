@@ -1,69 +1,39 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 11: Check Alerts — Did Any Alarms Go Off?</title>
-  <!--
-    GOOGLE DOCS IMPORT:
-    1. Go to https://docs.google.com
-    2. File > Open > Upload > select this file
-  -->
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  h4{font-size:11pt;color:#3c4043;margin-top:14px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}
-  tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 11: Check Alerts — Did Any Alarms Go Off?</h1>
-<br>
-<div class="note"><strong>Difficulty:</strong> ⭐⭐ Intermediate  </div>
-<div class="note"><strong>Time to run:</strong> ~2 minutes  </div>
-<div class="note"><strong>What it does:</strong> Queries Prometheus to check whether any defined alert thresholds were breached during a benchmark run</div>
-<div class="note"><strong>Requires:</strong> Prometheus running in the cluster (included with OpenShift by default)</div>
-<br>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐ Intermediate  </blockquote>
+<blockquote><strong>Time to run:</strong> ~2 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Queries Prometheus to check whether any defined alert thresholds were breached during a benchmark run</blockquote>
+<blockquote><strong>Requires:</strong> Prometheus running in the cluster (included with OpenShift by default)</blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What is this test? 🔔</h2>
-<br>
+<p></p>
 <p>Imagine your cluster is a building with a fire alarm system.  </p>
 <p><strong>Check Alerts</strong> is like checking the alarm panel after a fire drill — it asks:  </p>
 <p><em>"Did any alarms go off during the test? If so, which ones?"</em></p>
-<br>
+<p></p>
 <p>Kube-burner can define alert rules (thresholds) like:</p>
 <li><em>"API server latency should never go above 1 second"</em></li>
 <li><em>"CPU usage should stay below 80%"</em></li>
 <li><em>"No pods should be stuck Pending for more than 5 minutes"</em></li>
-<br>
+<p></p>
 <p>After a benchmark, the <code>check-alerts</code> command checks whether any of these rules were violated. If they were, kube-burner <strong>exits with code 3</strong> so your CI pipeline knows something went wrong.</p>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What does it check?</h2>
-<br>
-<pre>
-  Prometheus ──► stores metrics from your cluster
+<p></p>
+<pre><code>  Prometheus ──► stores metrics from your cluster
        │
        │  kube-burner asks: "were any of my thresholds breached?"
        ▼
@@ -76,70 +46,58 @@
        │
        ▼
   All rules pass ──► exit code 0 (success)
-  Any rule fails ──► exit code 3 (threshold breached!)
-</pre>
-<br>
+  Any rule fails ──► exit code 3 (threshold breached!)</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Before you start ✅</h2>
-<br>
+<p></p>
 <li>[ ] kube-burner installed</li>
 <li>[ ] Logged in as cluster-admin</li>
 <li>[ ] RBAC applied</li>
 <li>[ ] Prometheus is running in the cluster (<code>oc get pods -n openshift-monitoring</code>)</li>
 <li>[ ] You have run a benchmark first (something to check alerts <em>about</em>)</li>
-<br>
+<p></p>
 <h3>Find your Prometheus URL (OpenShift)</h3>
-<br>
-<pre>
-PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
+<p></p>
+<pre><code>PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
   -o jsonpath='{.spec.host}')
-echo "https://${PROMETHEUS_URL}"
-</pre>
-<br>
+echo "https://${PROMETHEUS_URL}"</code></pre>
+<p></p>
 <h3>Get a Prometheus token</h3>
-<br>
-<pre>
-PROMETHEUS_TOKEN=$(oc create token prometheus-k8s -n openshift-monitoring)
-echo $PROMETHEUS_TOKEN
-</pre>
-<br>
+<p></p>
+<pre><code>PROMETHEUS_TOKEN=$(oc create token prometheus-k8s -n openshift-monitoring)
+echo $PROMETHEUS_TOKEN</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Step-by-step guide</h2>
-<br>
-<div class="step-hdr">Step 1 — Create the namespace</div>
-<br>
-<div class="note"><strong>Do this first — every other step depends on it.</strong></div>
-<br>
-<pre>
-oc new-project burner-alerts
-</pre>
-<br>
+<p></p>
+<h3>Step 1 — Create the namespace</h3>
+<p></p>
+<blockquote><strong>Do this first — every other step depends on it.</strong></blockquote>
+<p></p>
+<pre><code>oc new-project burner-alerts</code></pre>
+<p></p>
 <p>You should see:</p>
-<pre>
-Now using project "burner-alerts" on server "https://api.&lt;your-cluster&gt;:6443"
-</pre>
-<br>
-<div class="note"><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</div>
-<br>
-<div class="step-hdr">Step 2 — Set up RBAC</div>
-<br>
+<pre><code>Now using project "burner-alerts" on server "https://api.&lt;your-cluster&gt;:6443"</code></pre>
+<p></p>
+<blockquote><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</blockquote>
+<p></p>
+<h3>Step 2 — Set up RBAC</h3>
+<p></p>
 <p>Every test needs a <code>ServiceAccount</code>, <code>ClusterRole</code>, and <code>ClusterRoleBinding</code>. Run all three commands — they are safe to re-run if any already exist.</p>
-<br>
+<p></p>
 <p><strong>2a — Create the ServiceAccount in this namespace:</strong></p>
-<br>
-<pre>
-oc create serviceaccount kube-burner -n burner-alerts \
-  --dry-run=client -o yaml | oc apply -f -
-</pre>
-<br>
+<p></p>
+<pre><code>oc create serviceaccount kube-burner -n burner-alerts \
+  --dry-run=client -o yaml | oc apply -f -</code></pre>
+<p></p>
 <p><strong>2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):</strong></p>
-<br>
-<div class="note">These are applied inline below — no local file needed. Safe to re-run at any time.</div>
-<br>
-<pre>
-oc apply -f - &lt;&lt;'EOF'
+<p></p>
+<blockquote>These are applied inline below — no local file needed. Safe to re-run at any time.</blockquote>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -173,35 +131,29 @@ subjects:
   - kind: ServiceAccount
     name: kube-burner
     namespace: burner-alerts
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <p><strong>2c — Add this namespace to the ClusterRoleBinding:</strong></p>
-<br>
-<pre>
-oc patch clusterrolebinding kube-burner \
+<p></p>
+<pre><code>oc patch clusterrolebinding kube-burner \
   --type=json \
-  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-alerts"}}]' 2&gt;/dev/null || true
-</pre>
-<br>
-<div class="note">The <code>|| true</code> at the end means this command will not fail if the namespace is already listed. It is safe to run every time.</div>
-<br>
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-alerts"}}]' 2&gt;/dev/null || true</code></pre>
+<p></p>
+<blockquote>The <code>|| true</code> at the end means this command will not fail if the namespace is already listed. It is safe to run every time.</blockquote>
+<p></p>
 <p><strong>Verify all three are in place before continuing:</strong></p>
-<br>
-<pre>
-oc get serviceaccount kube-burner -n burner-alerts
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-alerts
 oc get clusterrole kube-burner
-oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
-</pre>
-<br>
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'</code></pre>
+<p></p>
 <p>The last command should include <code>burner-alerts</code> in the output.</p>
-<br>
-<div class="step-hdr">Step 3 — Create your alert profile</div>
-<br>
+<p></p>
+<h3>Step 3 — Create your alert profile</h3>
+<p></p>
 <p>Create <code>alerts.yml</code> — this defines what is "too slow" or "too hot":</p>
-<br>
-<pre>
-cat &gt; /tmp/alerts.yml &lt;&lt; 'EOF'
+<p></p>
+<pre><code>cat &gt; /tmp/alerts.yml &lt;&lt; 'EOF'
 # Alert profile for kube-burner check-alerts
 # Each entry defines a Prometheus query and a threshold.
 # If the query returns a value ABOVE the threshold, the alert fires.
@@ -228,27 +180,23 @@ alerts:
     description: "Total running pods must be below 1000"
     severity: warning
     threshold: 1000
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 4 — Store the alert profile as a ConfigMap</div>
-<br>
-<pre>
-oc create configmap alerts-config \
+<p></p>
+<h3>Step 4 — Store the alert profile as a ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap alerts-config \
   --from-file=alerts.yml=/tmp/alerts.yml \
-  -n burner-alerts
-</pre>
-<br>
+  -n burner-alerts</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 5 — Run the alert check</div>
-<br>
+<p></p>
+<h3>Step 5 — Run the alert check</h3>
+<p></p>
 <p>You need to know your Prometheus URL and token (found in the section above).</p>
-<br>
-<pre>
-PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
+<p></p>
+<pre><code>PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
   -o jsonpath='{.spec.host}')
 PROMETHEUS_TOKEN=$(oc create token prometheus-k8s -n openshift-monitoring --duration=1h)
 
@@ -290,72 +238,54 @@ spec:
             name: alerts-config
         - name: workdir
           emptyDir: {}
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 6 — Read the results</div>
-<br>
-<pre>
-oc logs job/kb-check-alerts -n burner-alerts
-</pre>
-<br>
+<p></p>
+<h3>Step 6 — Read the results</h3>
+<p></p>
+<pre><code>oc logs job/kb-check-alerts -n burner-alerts</code></pre>
+<p></p>
 <p><strong>All alerts pass (healthy cluster):</strong></p>
-<br>
-<pre>
-time="..." level=info msg="Checking alerts..."
+<p></p>
+<pre><code>time="..." level=info msg="Checking alerts..."
 time="..." level=info msg="[PASS] API server 99th percentile latency (ms): 342ms &lt; 1000ms ✅"
 time="..." level=info msg="[PASS] Average cluster CPU usage: 12% &lt; 80% ✅"
 time="..." level=info msg="[PASS] Total running pods: 187 &lt; 1000 ✅"
-time="..." level=info msg="All alerts passed."
-</pre>
-<br>
+time="..." level=info msg="All alerts passed."</code></pre>
+<p></p>
 <p><strong>An alert fired:</strong></p>
-<br>
-<pre>
-time="..." level=error msg="[FAIL] API server 99th percentile latency: 1450ms &gt; 1000ms ❌"
-time="..." level=error msg="Alert threshold breached. Exiting with code 3."
-</pre>
-<br>
+<p></p>
+<pre><code>time="..." level=error msg="[FAIL] API server 99th percentile latency: 1450ms &gt; 1000ms ❌"
+time="..." level=error msg="Alert threshold breached. Exiting with code 3."</code></pre>
+<p></p>
 <p><strong>Check the exit code:</strong></p>
-<br>
-<pre>
-oc get pod -l job-name=kb-check-alerts -n burner-alerts \
+<p></p>
+<pre><code>oc get pod -l job-name=kb-check-alerts -n burner-alerts \
   -o jsonpath='{.items[0].status.containerStatuses[0].state.terminated.exitCode}'
 # 0 = all alerts passed ✅
-# 3 = one or more thresholds breached ❌
-</pre>
-<br>
+# 3 = one or more thresholds breached ❌</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 7 — Clean up</div>
-<br>
-<pre>
-oc delete job kb-check-alerts -n burner-alerts
+<p></p>
+<h3>Step 7 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-check-alerts -n burner-alerts
 oc delete configmap alerts-config -n burner-alerts
-oc delete project burner-alerts
-</pre>
-<br>
+oc delete project burner-alerts</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Troubleshooting</h2>
-<br>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead><tbody>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
 <tr><td><code>no such host prometheus-k8s</code></td><td>Use <code>oc get routes -A</code> to find the real Prometheus route URL</td></tr>
 <tr><td><code>401 Unauthorized</code></td><td>Token expired — create a new one with <code>oc create token</code></td></tr>
 <tr><td><code>403 Forbidden</code></td><td>The ServiceAccount needs <code>get</code> on <code>routes</code> — check RBAC</td></tr>
 <tr><td>All alerts fire on a fresh cluster</td><td>Thresholds may be too tight — adjust values in <code>alerts.yml</code></td></tr>
-</tbody></table>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <p><em>Next test: <a href="12-index.md">12 — Index Metrics</a> — save your Prometheus data for later analysis</em></p>
-<br>
-<div class="footer">
-  Kube-Burner v2.6.1 &mdash; Test Guide &mdash; 11-check-alerts<br>
-  Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
-</div>
-</body>
-</html>
+<p></p>
+</body></html>

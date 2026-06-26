@@ -1,69 +1,189 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Test 24: Windows Server VM Fleet Density</title>
-<style>
-body { font-family: 'Google Sans', Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #202124; line-height: 1.6; }
-h1 { color: #d93025; border-bottom: 3px solid #d93025; padding-bottom: 12px; }
-h2 { color: #1a73e8; margin-top: 32px; }
-h3 { color: #188038; margin-top: 24px; }
-blockquote { background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
-code { background: #f1f3f4; padding: 2px 6px; border-radius: 3px; font-family: 'Roboto Mono', monospace; font-size: 0.9em; }
-pre { background: #202124; color: #e8eaed; padding: 16px; border-radius: 8px; overflow-x: auto; }
-pre code { background: none; color: #e8eaed; padding: 0; }
-table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-th { background: #1a73e8; color: white; padding: 10px 14px; text-align: left; }
-td { padding: 10px 14px; border-bottom: 1px solid #e0e0e0; }
-tr:nth-child(even) { background: #f8f9fa; }
-.badge { display: inline-block; background: #e8f0fe; color: #1a73e8; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 600; margin: 2px; }
-.warning { background: #fce8e6; border-left: 4px solid #d93025; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 24: Windows Server VM Fleet Density — VMware Migration Demo</h1>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐ Advanced  </blockquote>
+<blockquote><strong>Time to run:</strong> 30–60 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Creates N Windows Server 2022 VMs simultaneously and measures boot latency — the most compelling VMware migration demo you can run  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization 4.x, multi-node cluster, Windows golden image pre-imported  </blockquote>
+<blockquote><strong>VM Image:</strong> <code>win2k22</code> DataVolume from <code>openshift-virtualization-os-images</code> (or customer-provided)</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h2>What is this test? 🪟</h2>
+<p></p>
+<p>When a customer is evaluating whether to move their VMware estate to OpenShift, the most common objection is:  </p>
+<p><em>"But can it run our Windows workloads?"</em></p>
+<p></p>
+<p>This test answers that with a live demonstration: <strong>N Windows Server 2022 VMs booting simultaneously on OpenShift Virtualization</strong>.</p>
+<p></p>
+<p>Windows takes 3–8 minutes to boot (vs 5 seconds for CirrOS). That is not a problem — it is realistic. Showing a customer 10 Windows VMs come online one-by-one over 5 minutes, each one in the OpenShift console VM list, is more powerful than any slide.</p>
+<p></p>
+<p><strong>What to say:</strong> <em>"These are Windows Server 2022 instances — the same OS running your SQL Server, your IIS, your Active Directory. Watch them boot. We started all of them at the same time and the cluster handled it without breaking a sweat."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h2>Pre-flight — Windows image setup</h2>
+<p></p>
+<p>Windows VMs require a pre-imported disk image. OpenShift Virtualization provides this through its <strong>golden images</strong> feature. Check if the Windows image already exists:</p>
+<p></p>
+<pre><code># Check for the Windows Server 2022 golden image
+oc get datavolume win2k22 -n openshift-virtualization-os-images 2&gt;/dev/null || \
+  echo "Windows golden image not found"
 
-<p>
-<span class="badge">⭐⭐⭐⭐ Advanced</span>
-<span class="badge">⏱ 30–60 minutes</span>
-<span class="badge">🪟 Windows Server 2022</span>
-<span class="badge">OpenShift Virtualization required</span>
-</p>
+# Also check for the DataSource (alternative source)
+oc get datasource win2k22 -n openshift-virtualization-os-images 2&gt;/dev/null || \
+  echo "Windows DataSource not found"</code></pre>
+<p></p>
+<h3>If the golden image exists — you are ready</h3>
+<p></p>
+<p>The golden image exists if <code>oc get datavolume win2k22 -n openshift-virtualization-os-images</code> returns a result. Skip to Step 1.</p>
+<p></p>
+<h3>If the golden image does NOT exist — import it</h3>
+<p></p>
+<p>OpenShift Virtualization can import the Windows image using the CDI (Containerized Data Importer). This requires a Windows Server 2022 ISO available via HTTP. Ask your cluster administrator, or enable the OpenShift Virtualization operator's automatic image downloads:</p>
+<p></p>
+<pre><code># Option 1: Enable automatic Windows image download via the operator
+oc patch hco kubevirt-hyperconverged \
+  -n openshift-cnv \
+  --type merge \
+  -p '{"spec":{"featureGates":{"deployKubevirtIpamController":true}}}'
 
-<blockquote>
-<strong>What it does:</strong> Creates N Windows Server 2022 VMs simultaneously — the most compelling VMware migration demo you can run<br>
-<strong>VM Image:</strong> win2k22 DataVolume from openshift-virtualization-os-images namespace
-</blockquote>
-
-<div class="warning">
-<strong>⚠️ Pre-flight required:</strong> This test requires the Windows Server 2022 golden image to be pre-imported into the openshift-virtualization-os-images namespace. Run <code>oc get datavolume win2k22 -n openshift-virtualization-os-images</code> to verify before starting.
-</div>
-
-<h2>What is this test?</h2>
-<p>When a customer is evaluating whether to move their VMware estate to OpenShift, the most common objection is: "But can it run our Windows workloads?" This test answers that with a live demonstration: N Windows Server 2022 VMs booting simultaneously on OpenShift Virtualization.</p>
-
-<h2>Pre-flight — verify Windows image</h2>
-<pre><code>oc get datavolume win2k22 -n openshift-virtualization-os-images
-# Should show PHASE: Succeeded</code></pre>
-
+# Option 2: Check if a boot source exists that can be used
+oc get datasource -n openshift-virtualization-os-images | grep win</code></pre>
+<p></p>
+<p>If no Windows image is available on the cluster, contact your cluster administrator to import one before running this test. The test will fail without a valid Windows disk source.</p>
+<p></p>
+<hr>
+<p></p>
+<h2>What this test does</h2>
+<p></p>
+<pre><code>YOU                         CLUSTER
+ │
+ │  oc apply -f job.yaml
+ ▼
+┌──────────────────────────────────────────────────────────────┐
+│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.6.1)    │
+│                                                              │
+│  Creates N Windows Server 2022 VMs (running: true)          │
+│                                                              │
+│  Windows 2022 Boot Sequence (3–8 minutes):                   │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  VM Created → DataVolume clone starts                  │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  QEMU starts → BIOS/UEFI POST                         │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  Windows kernel loads → Services start                │  │
+│  │       │                                                │  │
+│  │       ▼                                                │  │
+│  │  Desktop ready (VM reaches Running)                    │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                                                              │
+│  Measures: vmiLatency P50/P95/P99                            │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h2>What it measures</h2>
+<p></p>
+<tr><td>Metric</td><td>Description</td><td>Windows vs CirrOS</td></tr>
+<tr><td>VMI ready latency P50/P95/P99</td><td>Time from VM creation to Running</td><td>3–8 min vs 5–15 s</td></tr>
+<tr><td>DataVolume clone time</td><td>Time to clone the Windows image per VM</td><td>30–120 s per VM</td></tr>
+<tr><td>virt-handler load</td><td>Sustained reconcile during long Windows boot</td><td>Higher sustained load</td></tr>
+<tr><td>Node memory pressure</td><td>4 Gi RAM per VM</td><td>4 Gi per VM vs 512 Mi</td></tr>
+<tr><td>Storage I/O</td><td>Disk write throughput during Windows boot</td><td>Very high — Windows writes a lot</td></tr>
+<p></p>
+<hr>
+<p></p>
 <h2>Before you start — open these browser tabs</h2>
-<table>
-<tr><th>Tab</th><th>Where</th><th>What you watch</th></tr>
-<tr><td>Tab 1</td><td>Console (already open)</td><td>Web terminal</td></tr>
-<tr><td>Tab 2</td><td>Virtualization → VirtualMachines</td><td>Windows VMs in Provisioning → Starting → Running</td></tr>
-<tr><td>Tab 3</td><td>Observe → Metrics</td><td>kubevirt_vmi_phase_count{phase="Running"}</td></tr>
-<tr><td>Tab 4</td><td>Observe → Dashboards → KubeVirt / Top Consumers</td><td>Memory and storage I/O</td></tr>
-</table>
-
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VMs appearing and booting (slowly — this is normal)</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Observe → Metrics</td><td><code>kubevirt_vmi_phase_count{phase="Running"}</code></td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</td><td>Memory and storage I/O</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h2>Pre-flight checklist</h2>
+<p></p>
+<p>Run all checks before starting. Every check must pass.</p>
+<p></p>
+<h3>Check 1 — kube-burner image is pullable</h3>
+<p></p>
+<pre><code>oc delete pod kb-preflight -n default 2&gt;/dev/null || true
+oc run kb-preflight \
+  -n default \
+  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --restart=Never \
+  --command -- kube-burner version</code></pre>
+<p></p>
+<p>Run every 15 seconds until <code>Completed</code>:</p>
+<p></p>
+<pre><code>oc get pod kb-preflight -n default
+oc logs kb-preflight -n default | grep -i version   # Expected: Version: v2.6.1
+oc delete pod kb-preflight -n default 2&gt;/dev/null || true</code></pre>
+<p></p>
+<p>If <code>ImagePullBackOff</code> — quay.io is blocked on this cluster. No tests can run until resolved.</p>
+<p></p>
+<h3>Check 2 — Windows golden image is available</h3>
+<p></p>
+<pre><code># Must show PHASE: Succeeded
+oc get datavolume win2k22 -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p>If not found — see the <a href="#pre-flight--windows-image-setup">Pre-flight — Windows image setup</a> section below.</p>
+<p></p>
+<h3>Check 3 — Storage class available for DataVolume cloning</h3>
+<p></p>
+<pre><code>oc get storageclass</code></pre>
+<p></p>
+<p>Note the default storage class name. You may need to set <code>storageClassName</code> in the VM template if it is not auto-selected.</p>
+<p></p>
+<h3>Check 4 — Memory available</h3>
+<p></p>
+<pre><code>oc adm top nodes</code></pre>
+<p></p>
+<p>Each Windows VM needs 4 GiB + 50 Gi storage. For 4 VMs: need ~16 GiB RAM and ~200 GiB storage free.</p>
+<p></p>
+<hr>
+<p></p>
 <h2>Step-by-step guide</h2>
-
-<h3>Step 1 — Set parameters</h3>
-<pre><code>VM_COUNT=4
-UUID="windows-fleet-$(date +%s)"</code></pre>
-
-<h3>Step 2 — Create project and RBAC</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 1 — Open the web terminal</h3>
+<p></p>
+<pre><code>oc whoami
+oc get hyperconverged -A
+oc get datavolume win2k22 -n openshift-virtualization-os-images</code></pre>
+<p></p>
+<p>The DataVolume must show <code>PHASE: Succeeded</code>. If not — stop and complete the Pre-flight section.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Choose how many Windows VMs to create</h3>
+<p></p>
+<tr><td>Cluster size</td><td>Workers</td><td>Available RAM</td><td>Starter</td><td>Medium</td><td>Heavy</td></tr>
+<tr><td>Small</td><td>2–3</td><td>32–64 Gi per node</td><td>2 VMs</td><td>4 VMs</td><td>6 VMs</td></tr>
+<tr><td>Medium</td><td>4–6</td><td>64+ Gi per node</td><td>4 VMs</td><td>8 VMs</td><td>12 VMs</td></tr>
+<tr><td>Large</td><td>6+</td><td>128+ Gi per node</td><td>6 VMs</td><td>12 VMs</td><td>20 VMs</td></tr>
+<p></p>
+<blockquote>Windows uses significantly more RAM and storage than RHEL or CirrOS. Start conservatively.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Create the project and RBAC</h3>
+<p></p>
 <pre><code>oc new-project burner-windows-fleet
 oc create serviceaccount kube-burner -n burner-windows-fleet</code></pre>
+<p></p>
 <pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -71,16 +191,19 @@ metadata:
   name: kube-burner
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, services, configmaps, secrets, nodes, events, serviceaccounts, persistentvolumeclaims]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts, persistentvolumeclaims]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
     verbs: [get, list, watch, create, delete, update, patch]
   - apiGroups: [kubevirt.io]
     resources: [virtualmachines, virtualmachineinstances]
     verbs: [get, list, watch, create, delete, update, patch]
   - apiGroups: [cdi.kubevirt.io]
     resources: [datavolumes]
-    verbs: [get, list, watch, create, delete, update, patch]
-  - apiGroups: [batch]
-    resources: [jobs]
     verbs: [get, list, watch, create, delete, update, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -96,8 +219,29 @@ subjects:
     name: kube-burner
     namespace: burner-windows-fleet
 EOF</code></pre>
-
-<h3>Step 3 — Write config file</h3>
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-windows-fleet
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Switch to Tab 2</h3>
+<p></p>
+<p>Go to <strong>Virtualization → VirtualMachines</strong>. Windows VMs will spend more time in <code>Provisioning</code> (while the DataVolume clones) and <code>Starting</code> (while Windows boots) before reaching <code>Running</code>. This extended boot time is exactly what makes this test compelling for demos.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Set your parameters</h3>
+<p></p>
+<pre><code># Customize these values based on Step 2
+VM_COUNT=4
+UUID="windows-fleet-$(date +%s)"</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Write the config file</h3>
+<p></p>
 <pre><code>cat &gt; /tmp/windows-fleet-config.yml &lt;&lt; EOF
 global:
   gc: false
@@ -126,8 +270,11 @@ jobs:
         kind: VirtualMachine
         labelSelector: {kube-burner-job: create-windows-vms}
 EOF</code></pre>
-
-<h3>Step 4 — Write Windows VM template</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Write the Windows Server VM template</h3>
+<p></p>
 <pre><code>cat &gt; /tmp/windows-vm-template.yml &lt;&lt; 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -200,12 +347,22 @@ spec:
           dataVolume:
             name: win-disk-{{.Iteration}}-{{.Replica}}
 EOF</code></pre>
-
-<h3>Step 5 — Create ConfigMap and launch Job</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Create the ConfigMap</h3>
+<p></p>
 <pre><code>oc create configmap windows-fleet-config \
   --from-file=config.yml=/tmp/windows-fleet-config.yml \
   --from-file=windows-vm-template.yml=/tmp/windows-vm-template.yml \
-  -n burner-windows-fleet</code></pre>
+  -n burner-windows-fleet
+
+oc get configmap windows-fleet-config -n burner-windows-fleet</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Launch the Job</h3>
+<p></p>
 <pre><code>cat &lt;&lt; JOBYAML | oc apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -239,28 +396,77 @@ spec:
         - name: workdir
           emptyDir: {}
 JOBYAML</code></pre>
-
-<h3>Step 6 — Stream logs</h3>
-<pre><code>oc get pod -n burner-windows-fleet -w
-oc logs -f job/kb-windows-fleet -n burner-windows-fleet</code></pre>
-
-<h3>Step 7 — Clean up</h3>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 10 — Stream logs</h3>
+<p></p>
+<pre><code>oc get pod -n burner-windows-fleet -w</code></pre>
+<p></p>
+<p>Wait for <code>Running</code>, then:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-windows-fleet -n burner-windows-fleet</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 11 — The customer demo narrative</h3>
+<p></p>
+<p>Windows VMs have a distinctive boot progression in the OCP console. Use this script:</p>
+<p></p>
+<p><strong>Phase 1 — DataVolume cloning (~1–3 minutes):</strong></p>
+<blockquote><em>"You can see the VMs are in 'Provisioning' — OpenShift is cloning the Windows golden image for each VM. This is like deploying VMs from a template in VMware. Each one gets its own private copy of the Windows disk."</em></blockquote>
+<p></p>
+<p><strong>Phase 2 — QEMU/BIOS startup (~1–2 minutes):</strong></p>
+<blockquote><em>"Now they're in 'Starting' — Windows is booting. BIOS POST, Windows kernel loading, services starting. Same as any Windows Server coming online."</em></blockquote>
+<p></p>
+<p><strong>Phase 3 — Windows Running:</strong></p>
+<blockquote><em>"There they go — Windows Server 2022, running on OpenShift. You can click any one of those and open the VNC console to see the Windows desktop. This is your workload, running on your cluster, without VMware."</em></blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 12 — Read the results</h3>
+<p></p>
+<pre><code>INFO vmiLatency:
+INFO   P50:  245s
+INFO   P95:  312s
+INFO   P99:  380s   ← Windows boots slowly — this is expected and honest
+INFO Finished execution. UUID: windows-fleet-...</code></pre>
+<p></p>
+<tr><td>Metric</td><td>Good</td><td>Investigate</td></tr>
+<tr><td>P99 boot time</td><td>< 8 minutes</td><td>> 15 minutes</td></tr>
+<tr><td>All VMs reach Running</td><td>Yes</td><td>Any stuck in Provisioning > 10 min</td></tr>
+<tr><td>DataVolume status</td><td>Succeeded</td><td>Failed — check CDI controller</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 13 — Clean up</h3>
+<p></p>
 <pre><code>oc delete job kb-windows-fleet -n burner-windows-fleet 2&gt;/dev/null || true
 oc delete configmap windows-fleet-config -n burner-windows-fleet 2&gt;/dev/null || true
 oc delete vm -A -l app=windows-fleet 2&gt;/dev/null || true
+# Wait for DataVolumes to be cleaned up with the VMs
 sleep 30
 oc delete project burner-windows-fleet
 oc delete clusterrole kube-burner 2&gt;/dev/null || true
 oc delete clusterrolebinding kube-burner 2&gt;/dev/null || true</code></pre>
-
+<p></p>
+<p>Verify:</p>
+<p></p>
+<pre><code>oc get projects | grep burner-windows-fleet
+oc get vm -A -l app=windows-fleet 2&gt;/dev/null
+# Both should return nothing</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<tr><th>Problem</th><th>Fix</th></tr>
-<tr><td>win2k22 DataVolume not found</td><td>Windows golden image not imported — check Pre-flight</td></tr>
-<tr><td>VMs stuck in Provisioning &gt; 10 min</td><td>CDI still cloning — check oc get datavolume -n burner-windows-fleet</td></tr>
-<tr><td>cannot create resource "datavolumes"</td><td>Add cdi.kubevirt.io to ClusterRole (Step 2)</td></tr>
-<tr><td>serviceaccount "kube-burner" not found</td><td>Re-run Step 2 — create SA separately</td></tr>
-<tr><td>Storage class not found</td><td>Set storageClassName in DataVolumeTemplate to your cluster default</td></tr>
-</table>
-</body>
-</html>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td><code>win2k22 DataVolume not found</code></td><td>Windows golden image not imported — complete Pre-flight section</td></tr>
+<tr><td>VMs stuck in <code>Provisioning</code> > 10 min</td><td>CDI is still cloning the disk — check <code>oc get datavolume -n burner-windows-fleet</code></td></tr>
+<tr><td><code>cannot create resource "datavolumes"</code></td><td>Add <code>cdi.kubevirt.io</code> to ClusterRole (Step 3)</td></tr>
+<tr><td>VMs stuck in <code>Starting</code> > 15 min</td><td>Windows boot stalled — check <code>oc logs -n <ns> -l kubevirt.io=virt-launcher</code></td></tr>
+<tr><td><code>serviceaccount "kube-burner" not found</code></td><td>Re-run Step 3 — create SA separately</td></tr>
+<tr><td>OOMKilled virt-launcher pods</td><td>Worker node out of RAM — reduce <code>VM_COUNT</code></td></tr>
+<tr><td>Storage class not found</td><td>Set <code>storageClassName</code> in the DataVolumeTemplate to your cluster's default storage class</td></tr>
+<p></p>
+</body></html>

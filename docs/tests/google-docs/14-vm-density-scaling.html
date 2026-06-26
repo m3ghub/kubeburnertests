@@ -1,48 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 14: VM Density Scaling — Finding Your Cluster's Ceiling</title>
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-  </style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 14: VM Density Scaling — Finding Your Cluster's Ceiling</h1>
-<div class="note"><strong>Difficulty:</strong> ⭐⭐⭐⭐ Expert</div>
-<div class="note"><strong>Time to run:</strong> 30–90 minutes (depends on how many VMs your cluster handles)</div>
-<div class="note"><strong>What it does:</strong> Progressively increases the number of running VMs in steps until the cluster reaches its limit — finding the exact maximum VM density</div>
-<div class="warn"><strong>Requires:</strong> OpenShift Virtualization, at least 2 worker nodes</div>
-<div class="tip"><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster — see <a href="00-preflight.html">00-preflight</a>.</div>
-<br><hr><br>
-
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐⭐ Expert  </blockquote>
+<blockquote><strong>Time to run:</strong> 30–90 minutes (depends on how many VMs your cluster can handle)  </blockquote>
+<blockquote><strong>What it does:</strong> Progressively increases the number of running VMs in steps until the cluster reaches its limit — finding the exact maximum VM density  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed, at least 2 worker nodes  </blockquote>
+<blockquote><strong>No local install needed:</strong> kube-burner runs inside the cluster as a Job</blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
+<hr>
+<p></p>
 <h2>What is this test? 📈🖥️</h2>
-<p>This test answers the most important question for any virtualised infrastructure:</p>
-<div class="tip"><strong>"How many VMs can this cluster actually handle before it falls over?"</strong></div>
-<p>Instead of guessing, this test climbs a controlled ladder — adding VMs in batches and waiting for all of them to reach <code>Running</code> before adding more. When VMs stop reaching <code>Running</code> within the timeout, or nodes show resource pressure — you have found the ceiling.</p>
-<br><hr><br>
-
+<p></p>
+<p>This test answers one of the most important questions for any virtualised infrastructure:</p>
+<p></p>
+<blockquote><strong>"How many VMs can this cluster actually handle before it falls over?"</strong></blockquote>
+<p></p>
+<p>Instead of guessing, this test climbs a controlled ladder — adding VMs in batches and waiting for them all to reach <code>Running</code> before adding more. Like gradually turning up the heat on a stove instead of going straight to maximum.</p>
+<p></p>
+<p>When VMs stop reaching <code>Running</code> within the timeout, or nodes show resource pressure — you have found the ceiling.</p>
+<p></p>
+<p><strong>Without this number you are either:</strong></p>
+<p></p>
+<li><strong>Under-utilising</strong> the cluster (expensive hardware sitting idle), or</li>
+<li><strong>Over-committing</strong> (adding VMs until something silently breaks in production)</li>
+<p></p>
+<p>This test gives you a documented, repeatable number you can put in writing:  </p>
+<p><em>"This cluster reliably handles N VMs. Beyond that, boot time exceeds SLA."</em></p>
+<p></p>
+<hr>
+<p></p>
 <h2>How the ladder works</h2>
-<pre>VM Count over time:
+<p></p>
+<pre><code>VM Count over time:
 
     32 │                              ████
     16 │                    ████████████
@@ -53,55 +50,71 @@
           run1   run2   run3   run4   run5
 
 Each run: delete old VMs → create N new VMs → wait for all Running → record timing
-If VMs stop reaching Running: STOP — you found the ceiling</pre>
-<br><hr><br>
-
+If VMs stop reaching Running: STOP — you found the ceiling</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>What does it measure?</h2>
-<table>
-<thead><tr><th>Metric</th><th>What it means</th></tr></thead>
-<tbody>
-<tr><td>vmiLatency P50/P95/P99</td><td>Boot time percentiles at each VM count</td></tr>
-<tr><td>Step completion time</td><td>How long each batch takes to reach Running</td></tr>
-<tr><td>First failure step</td><td>At which VM count the cluster starts failing</td></tr>
-<tr><td>Node resource pressure</td><td>CPU/memory headroom at each step</td></tr>
-</tbody>
-</table>
-<br><hr><br>
-
+<p></p>
+<p></p>
+<tr><td>Metric</td><td>What it means</td></tr>
+<tr><td>--------------------------</td><td>--------------------------------------------</td></tr>
+<tr><td><strong>vmiLatency P50/P95/P99</strong></td><td>Boot time percentiles at each VM count</td></tr>
+<tr><td><strong>Step completion time</strong></td><td>How long each batch takes to reach Running</td></tr>
+<tr><td><strong>First failure step</strong></td><td>At which VM count the cluster starts failing</td></tr>
+<tr><td><strong>Node resource pressure</strong></td><td>CPU/memory headroom at each step</td></tr>
+<p></p>
+<p></p>
+<hr>
+<p></p>
 <h2>Before you start — open these browser tabs</h2>
-<table>
-<thead><tr><th>Tab</th><th>Where</th><th>What you watch</th></tr></thead>
-<tbody>
-<tr><td>Tab 1</td><td>Console (already open)</td><td>Web terminal</td></tr>
-<tr><td>Tab 2</td><td>Virtualization → VirtualMachines</td><td>VMs appearing and reaching Running</td></tr>
-<tr><td>Tab 3</td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</td><td>Resource climb at each step</td></tr>
-<tr><td>Tab 4</td><td>Compute → Nodes</td><td>Node memory/CPU pressure</td></tr>
-</tbody>
-</table>
-
+<p></p>
+<p></p>
+<tr><td>Tab</td><td>Where</td><td>What you watch</td></tr>
+<tr><td>---------</td><td>--------------------------------------------------------------------------</td><td>----------------------------------</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Console (already open)</td><td>Web terminal</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VMs appearing and reaching Running</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</td><td>Resource climb at each step</td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Compute → Nodes</td><td>Node memory/CPU pressure</td></tr>
+<p></p>
+<p></p>
+<hr>
+<p></p>
 <h2>Pre-flight checklist</h2>
-<ul>
+<p></p>
 <li>Logged into the OpenShift web console</li>
 <li>OpenShift Virtualization installed (<code>oc get hyperconverged -A</code> returns a result)</li>
 <li>Cluster-admin permissions</li>
 <li>Test 09 completed successfully (confirms VMs can boot on this cluster)</li>
 <li>Check available RAM per worker node — each CirrOS VM needs 128Mi</li>
-</ul>
-<pre>oc get nodes -l node-role.kubernetes.io/worker \
-  -o custom-columns='NAME:.metadata.name,RAM:.status.allocatable.memory'</pre>
-<p>Divide each node's RAM by 128Mi to estimate the per-node ceiling.<br>
-Example: 28Gi node ÷ 128Mi = ~224 VMs theoretical max (CPU and other limits will kick in first).</p>
-<br><hr><br>
-
+<p></p>
+<p>Check worker node RAM:</p>
+<p></p>
+<pre><code>oc get nodes -l node-role.kubernetes.io/worker \
+  -o custom-columns='NAME:.metadata.name,RAM:.status.allocatable.memory'</code></pre>
+<p></p>
+<p>Divide each node's RAM by 128Mi to estimate the per-node ceiling.  </p>
+<p>Example: 28Gi node ÷ 128Mi = ~224 VMs theoretical max (CPU and other limits will kick in first).</p>
+<p></p>
+<hr>
+<p></p>
 <h2>Step-by-step guide</h2>
-
-<div class="step-hdr">Step 1 — Open the web terminal</div>
-<p>Click the <strong><code>&gt;_</code> icon</strong> in the top-right of the console toolbar. Confirm it works:</p>
-<pre>oc whoami</pre>
-
-<div class="step-hdr">Step 2 — Create the project and RBAC</div>
-<pre>oc new-project burner-density-scale</pre>
-<pre>oc apply -f - &lt;&lt;'EOF'
+<p></p>
+<hr>
+<p></p>
+<h3>Step 1 — Open the web terminal</h3>
+<p></p>
+<p>Click the <code><strong>>_</code> icon</strong> in the top-right of the console toolbar. Confirm it works:</p>
+<p></p>
+<pre><code>oc whoami</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 2 — Create the project and RBAC</h3>
+<p></p>
+<pre><code>oc new-project burner-density-scale</code></pre>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -114,8 +127,7 @@ metadata:
   name: kube-burner-virt
 rules:
   - apiGroups: [""]
-    resources: [namespaces, pods, services, configmaps, secrets, nodes,
-                 events, serviceaccounts]
+    resources: [namespaces, pods, services, configmaps, secrets, nodes, events, serviceaccounts]
     verbs: [get, list, watch, create, delete, update, patch]
   - apiGroups: [apps]
     resources: [deployments, replicasets, statefulsets, daemonsets]
@@ -142,16 +154,19 @@ subjects:
   - kind: ServiceAccount
     name: kube-burner
     namespace: burner-density-scale
-EOF</pre>
+EOF</code></pre>
+<p></p>
 <p>Expected output:</p>
-<pre>serviceaccount/kube-burner created
+<p></p>
+<pre><code>serviceaccount/kube-burner created
 clusterrole.rbac.authorization.k8s.io/kube-burner-virt created
-clusterrolebinding.rbac.authorization.k8s.io/kube-burner-virt created</pre>
-
-<div class="step-hdr">Step 3 — Create the config files</div>
-<p>The default VM template uses <strong>CirrOS</strong> — a tiny test OS that boots in seconds and uses ~128Mi RAM. See the OS options below if you want to use Windows or a different OS.</p>
-
-<pre>cat &gt; /tmp/density-scale-config.yml &lt;&lt; 'EOF'
+clusterrolebinding.rbac.authorization.k8s.io/kube-burner-virt created</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 3 — Create the config files</h3>
+<p></p>
+<pre><code>cat &gt; /tmp/density-scale-config.yml &lt;&lt; 'EOF'
 global:
   gc: false
   measurements:
@@ -216,118 +231,159 @@ spec:
         - name: containerdisk
           containerDisk:
             image: quay.io/kubevirt/cirros-registry-disk-demo:latest
-EOF</pre>
-
-<h3>Want a different operating system?</h3>
-<p>First, see what images are already available on your cluster — no external pull needed:</p>
-<pre>oc get dataimportcron -n openshift-virtualization-os-images</pre>
-<p>You will see something like:</p>
-<pre>NAME              MODIFIED   READY
-fedora            True       True
-rhel9             True       True
-win2k19-virtio    True       True
-win2k22-virtio    True       True
-windows11         True       True</pre>
-<pre>oc get pvc -n openshift-virtualization-os-images</pre>
-
-<h3>Option 1 — Linux containerDisk (pulls from quay.io)</h3>
-<p>Replace the <code>image:</code> line and adjust <code>memory:</code> in the template above:</p>
-<table>
-<thead><tr><th>OS</th><th>Image</th><th>Memory per VM</th><th>Boot time</th></tr></thead>
-<tbody>
-<tr><td>CirrOS (default, fastest)</td><td><code>quay.io/kubevirt/cirros-registry-disk-demo:latest</code></td><td>128Mi</td><td>15–30 s</td></tr>
-<tr><td>RHEL 9</td><td><code>quay.io/containerdisks/rhel9:9.0</code></td><td>2Gi</td><td>60–120 s</td></tr>
-<tr><td>Fedora</td><td><code>quay.io/containerdisks/fedora:latest</code></td><td>1Gi</td><td>30–60 s</td></tr>
-</tbody>
-</table>
-
-<h3>Option 2 — Any OS from your cluster's golden images (recommended for Windows)</h3>
-<p>This template <strong>clones a golden image PVC</strong> instead of pulling from the internet. Works fully air-gapped. Ideal for Windows.</p>
-<table>
-<thead><tr><th>OS</th><th>Golden PVC name</th><th>Memory per VM</th><th>Storage per VM</th></tr></thead>
-<tbody>
-<tr><td>Windows Server 2022</td><td><code>win2k22-virtio</code></td><td>8Gi</td><td>60Gi</td></tr>
-<tr><td>Windows Server 2019</td><td><code>win2k19-virtio</code></td><td>4Gi</td><td>60Gi</td></tr>
-<tr><td>Windows 11</td><td><code>windows11</code></td><td>8Gi</td><td>60Gi</td></tr>
-<tr><td>RHEL 9</td><td><code>rhel9</code></td><td>2Gi</td><td>30Gi</td></tr>
-<tr><td>Fedora</td><td><code>fedora</code></td><td>1Gi</td><td>15Gi</td></tr>
-</tbody>
-</table>
-<div class="warn">⚠️ <strong>Storage warning:</strong> Cloning a 60Gi PVC per VM means 100 Windows VMs = <strong>6TB of storage</strong>. Check available PV capacity first: <code>oc get pv</code></div>
-
-<p>Replace <code>win2k22-virtio</code>, <code>memory</code>, and <code>storage</code> for your chosen OS. Also set <code>maxWaitTimeout: 30m</code> or higher in the main config for Windows.</p>
-<pre>cat &gt; /tmp/vm-scale-template.yml &lt;&lt; 'EOF'
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata:
-  name: scale-vm-{{.Iteration}}-{{.Replica}}
-  labels:
-    app: burner-scale
-spec:
-  runStrategy: Always
-  dataVolumeTemplates:
-    - metadata:
-        name: scale-vm-{{.Iteration}}-{{.Replica}}-disk
-      spec:
-        source:
-          pvc:
-            name: win2k22-virtio          # ← golden image PVC name
-            namespace: openshift-virtualization-os-images
-        storage:
-          accessModes:
-            - ReadWriteMany
-          resources:
-            requests:
-              storage: 60Gi              # ← match the OS disk size
-  template:
-    metadata:
-      labels:
-        app: burner-scale
-    spec:
-      domain:
-        resources:
-          requests:
-            memory: 8Gi                  # ← match the OS memory requirement
-        devices:
-          disks:
-            - name: rootdisk
-              disk:
-                bus: virtio
-          interfaces:
-            - name: default
-              masquerade: {}
-      networks:
-        - name: default
-          pod: {}
-      volumes:
-        - name: rootdisk
-          dataVolume:
-            name: scale-vm-{{.Iteration}}-{{.Replica}}-disk
-EOF</pre>
-
-<div class="step-hdr">Step 3b — Verify both files exist</div>
-<pre>ls -lh /tmp/density-scale-config.yml \
-        /tmp/vm-scale-template.yml</pre>
-<p>Both files must show non-zero sizes before continuing. If either is missing, re-run Step 3.</p>
-<div class="note"><strong>Note:</strong> <code>spec.running: true</code> is deprecated in KubeVirt v1.x. Templates above use <code>runStrategy: Always</code>. Both are functionally identical; <code>running: true</code> produces a harmless warning in kube-burner logs only.</div>
-
+EOF</code></pre>
+<p></p>
+<blockquote><strong>Note:</strong> <code>spec.running: true</code> is deprecated in KubeVirt v1.x. Using <code>runStrategy: Always</code> (as above) avoids a harmless warning in the kube-burner logs.</blockquote>
+<p></p>
+<blockquote><strong>Want a different operating system?</strong></blockquote>
+<p>></p>
+<blockquote>First, see what golden images are already on your cluster — no external pull needed:</blockquote>
+<p>></p>
+<blockquote><code>`</code>bash</blockquote>
+<blockquote>oc get dataimportcron -n openshift-virtualization-os-images</blockquote>
+<blockquote><code>`</code></blockquote>
+<p>></p>
+<blockquote>You will see output like:</blockquote>
+<p>></p>
+<blockquote><code>`</code></blockquote>
+<blockquote>NAME                         MODIFIED   NEXTRUN   URL                          READY</blockquote>
+<blockquote>centos-stream9               True                  docker://quay.io/...         True</blockquote>
+<blockquote>fedora                       True                  docker://quay.io/...         True</blockquote>
+<blockquote>rhel9                        True                  docker://quay.io/...         True</blockquote>
+<blockquote>win2k19-virtio               True                                               True</blockquote>
+<blockquote>win2k22-virtio               True                                               True</blockquote>
+<blockquote>windows11                    True                                               True</blockquote>
+<blockquote><code>`</code></blockquote>
+<p>></p>
+<blockquote><strong>Option 1 — Linux (containerDisk, pulls from quay.io):</strong></blockquote>
+<blockquote>Replace the <code>image:</code> line and adjust <code>memory:</code> in the template above:</blockquote>
+<p>></p>
+<p>></p>
+<blockquote>| OS                        | Image                                               | Memory per VM | Boot time |</blockquote>
+<blockquote>| ------------------------- | --------------------------------------------------- | ------------- | --------- |</blockquote>
+<blockquote>| CirrOS (default, fastest) | <code>quay.io/kubevirt/cirros-registry-disk-demo:latest</code> | 128Mi         | 15–30 s   |</blockquote>
+<blockquote>| RHEL 9                    | <code>quay.io/containerdisks/rhel9:9.0</code>                  | 2Gi           | 60–120 s  |</blockquote>
+<blockquote>| Fedora                    | <code>quay.io/containerdisks/fedora:latest</code>              | 1Gi           | 30–60 s   |</blockquote>
+<p>></p>
+<p>></p>
+<blockquote><strong>Option 2 — Any OS from your cluster's golden images (no external pull, recommended for Windows):</strong></blockquote>
+<p>></p>
+<blockquote>Get the exact name of the golden image PVC:</blockquote>
+<p>></p>
+<blockquote><code>`</code>bash</blockquote>
+<blockquote>oc get pvc -n openshift-virtualization-os-images</blockquote>
+<blockquote><code>`</code></blockquote>
+<p>></p>
+<blockquote>Then use this alternative VM template that <strong>clones the golden image PVC</strong> instead of pulling a container disk.</blockquote>
+<blockquote>Replace <code>win2k22</code> with whatever PVC name you saw above, and adjust <code>memory:</code> and <code>storage:</code> to suit the OS:</blockquote>
+<p>></p>
+<p>></p>
+<blockquote>| OS                  | Golden PVC name  | Memory per VM | Storage per VM |</blockquote>
+<blockquote>| ------------------- | ---------------- | ------------- | -------------- |</blockquote>
+<blockquote>| Windows Server 2022 | <code>win2k22-virtio</code> | 8Gi           | 60Gi           |</blockquote>
+<blockquote>| Windows Server 2019 | <code>win2k19-virtio</code> | 4Gi           | 60Gi           |</blockquote>
+<blockquote>| Windows 11          | <code>windows11</code>      | 8Gi           | 60Gi           |</blockquote>
+<blockquote>| RHEL 9              | <code>rhel9</code>          | 2Gi           | 30Gi           |</blockquote>
+<blockquote>| Fedora              | <code>fedora</code>         | 1Gi           | 15Gi           |</blockquote>
+<p>></p>
+<p>></p>
+<blockquote>> ⚠️ <strong>Storage warning:</strong> Cloning a 60Gi PVC per VM means 100 VMs = <strong>6TB of storage</strong>. Confirm your cluster has enough PVC capacity before running at high replica counts. Use <code>oc get pv</code> to check available storage.</blockquote>
+<p>></p>
+<blockquote><code>`</code>bash</blockquote>
+<blockquote># Replace win2k22-virtio and the memory/storage values for your chosen OS</blockquote>
+<blockquote>cat > /tmp/vm-scale-template.yml << 'EOF'</blockquote>
+<blockquote>apiVersion: kubevirt.io/v1</blockquote>
+<blockquote>kind: VirtualMachine</blockquote>
+<blockquote>metadata:</blockquote>
+<blockquote>  name: scale-vm-{{.Iteration}}-{{.Replica}}</blockquote>
+<blockquote>  labels:</blockquote>
+<blockquote>    app: burner-scale</blockquote>
+<blockquote>spec:</blockquote>
+<blockquote>  runStrategy: Always</blockquote>
+<blockquote>  dataVolumeTemplates:</blockquote>
+<blockquote>    - metadata:</blockquote>
+<blockquote>        name: scale-vm-{{.Iteration}}-{{.Replica}}-disk</blockquote>
+<blockquote>      spec:</blockquote>
+<blockquote>        source:</blockquote>
+<blockquote>          pvc:</blockquote>
+<blockquote>            name: win2k22-virtio          # ← golden image PVC name</blockquote>
+<blockquote>            namespace: openshift-virtualization-os-images</blockquote>
+<blockquote>        storage:</blockquote>
+<blockquote>          accessModes:</blockquote>
+<blockquote>            - ReadWriteMany</blockquote>
+<blockquote>          resources:</blockquote>
+<blockquote>            requests:</blockquote>
+<blockquote>              storage: 60Gi              # ← match the OS disk size</blockquote>
+<blockquote>  template:</blockquote>
+<blockquote>    metadata:</blockquote>
+<blockquote>      labels:</blockquote>
+<blockquote>        app: burner-scale</blockquote>
+<blockquote>    spec:</blockquote>
+<blockquote>      domain:</blockquote>
+<blockquote>        resources:</blockquote>
+<blockquote>          requests:</blockquote>
+<blockquote>            memory: 8Gi                  # ← match the OS memory requirement</blockquote>
+<blockquote>        devices:</blockquote>
+<blockquote>          disks:</blockquote>
+<blockquote>            - name: rootdisk</blockquote>
+<blockquote>              disk:</blockquote>
+<blockquote>                bus: virtio</blockquote>
+<blockquote>          interfaces:</blockquote>
+<blockquote>            - name: default</blockquote>
+<blockquote>              masquerade: {}</blockquote>
+<blockquote>      networks:</blockquote>
+<blockquote>        - name: default</blockquote>
+<blockquote>          pod: {}</blockquote>
+<blockquote>      volumes:</blockquote>
+<blockquote>        - name: rootdisk</blockquote>
+<blockquote>          dataVolume:</blockquote>
+<blockquote>            name: scale-vm-{{.Iteration}}-{{.Replica}}-disk</blockquote>
+<blockquote>EOF</blockquote>
+<blockquote><code>`</code></blockquote>
+<p>></p>
+<blockquote>Also update <code>maxWaitTimeout</code> in the main config to <code>30m</code> or higher for Windows — it boots slower than CirrOS.</blockquote>
+<p></p>
 <hr>
-
-<div class="step-hdr">Step 4 — Package into a ConfigMap</div>
-<pre>oc create configmap density-scale-config \
+<p></p>
+<h3>Step 3b — Verify both files exist</h3>
+<p></p>
+<pre><code>ls -lh /tmp/density-scale-config.yml \
+        /tmp/vm-scale-template.yml</code></pre>
+<p></p>
+<p>Both files must show non-zero sizes before continuing. If either is missing, re-run Step 3.</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 4 — Package into a ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap density-scale-config \
   --from-file=config.yml=/tmp/density-scale-config.yml \
   --from-file=vm-scale-template.yml=/tmp/vm-scale-template.yml \
-  -n burner-density-scale</pre>
+  -n burner-density-scale</code></pre>
+<p></p>
 <p>Expected output:</p>
-<pre>configmap/density-scale-config created</pre>
-
-<div class="step-hdr">Step 5 — Switch to Tab 2</div>
+<p></p>
+<pre><code>configmap/density-scale-config created</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Switch to Tab 2</h3>
+<p></p>
 <p>Go to <strong>Virtualization → VirtualMachines</strong>, filter namespace to <code>burner-density-scale</code>. Keep it visible — you will watch the VM count grow with each run.</p>
-
-<div class="step-hdr">Step 6 — Run the escalation ladder</div>
-<p>Ladder: <strong>2 → 5 → 10 → 20 → 40 → 80</strong></p>
-<p>Change only <code>REPLICAS</code> and <code>UUID</code> at the top of this block for each run:</p>
-<pre>REPLICAS=2
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Run the escalation ladder</h3>
+<p></p>
+<p>Each run creates N VMs, waits for all to reach <code>Running</code>, records timing, then deletes them.</p>
+<p></p>
+<p><strong>Change only the two numbers at the top</strong> — <code>REPLICAS</code> and <code>UUID</code> — for each step. The config file is written fresh each run so the count is always exactly what you set.</p>
+<p></p>
+<p>Ladder: <code>2 → 5 → 10 → 20 → 40 → 80</code></p>
+<p></p>
+<p>Run block — paste this each time, changing <code>REPLICAS</code> and <code>UUID</code>:</p>
+<p></p>
+<pre><code>REPLICAS=2
 UUID=density-scale-2
 
 oc delete job kb-density-scale -n burner-density-scale 2&gt;/dev/null || true
@@ -338,6 +394,7 @@ global:
   gc: false
   measurements:
     - name: vmiLatency
+
 jobs:
   - name: create-vms
     namespace: burner-density-scale
@@ -351,6 +408,7 @@ jobs:
     objects:
       - objectTemplate: vm-scale-template.yml
         replicas: ${REPLICAS}
+
   - name: delete-vms
     namespace: burner-density-scale
     jobType: delete
@@ -363,7 +421,7 @@ jobs:
           app: burner-scale
 EOF
 
-# Verify the count before submitting:
+# Verify the replica count before submitting:
 grep replicas /tmp/density-scale-config.yml
 
 oc create configmap density-scale-config \
@@ -403,44 +461,71 @@ spec:
             name: density-scale-config
         - name: workdir
           emptyDir: {}
-JOBYAML</pre>
+JOBYAML</code></pre>
+<p></p>
 <p>Once the Job is running, stream the live output:</p>
-<pre>oc logs -f job/kb-density-scale -n burner-density-scale</pre>
-
-<div class="step-hdr">Step 7 — Record your results after each run</div>
-<pre>VM Count | All Running? | P99 Boot Time | Notes
+<p></p>
+<pre><code>oc logs -f job/kb-density-scale -n burner-density-scale</code></pre>
+<p></p>
+<blockquote><strong>What you will see first:</strong> kube-burner v2.6.1 automatically pre-pulls the container image to all nodes via a temporary DaemonSet before starting the VMs. This appears as <code>Pre-load: All images pulled on N nodes</code> and adds ~15 seconds but ensures consistent, fast boot times. It is cleaned up automatically.</blockquote>
+<p></p>
+<blockquote><strong><code>spec.running is deprecated</code> warnings</strong> in the logs are harmless — they come from using <code>runStrategy: Always</code> being the modern field name. VM behaviour is identical.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Record your results after each run</h3>
+<p></p>
+<p>Keep a log like this as you go:</p>
+<p></p>
+<pre><code>VM Count | All Running? | P99 Boot Time | Notes
 ---------|--------------|---------------|------
-2        | Yes          | ~12s          | Baseline (live run: 12s VMIRunning P99)
-5        | Yes          | ~19s          | Normal (live run: 19s VMIRunning P99)
-10       | Yes          | ~25-40s       | Starting to see the cluster work
-20       | Yes          | ~45-70s       | Moderate pressure — dashboards start moving
-40       | Yes          | ~90-150s      | Dashboards clearly moving
-80       | Timeout?     | N/A           | Ceiling found</pre>
-<div class="note"><strong>Live run results (this cluster, kube-burner v2.6.1, CirrOS):</strong> 2 VMs = 12s P99, 5 VMs = 19s P99. Faster than earlier estimates — kube-burner's image pre-load step ensures all nodes have the image cached before VMs start.</div>
+2        | Yes          | ~12s          | Baseline (live run: 12s P99)
+5        | Yes          | ~19s          | Normal (live run: 19s P99)
+10       | Yes          | ~25–40s       | Starting to see the cluster work
+20       | Yes          | ~45–70s       | Moderate pressure — dashboards start moving
+40       | Yes          | ~90–150s      | Dashboards clearly moving
+80       | Timeout?     | N/A           | Ceiling found</code></pre>
+<p></p>
+<blockquote><strong>Live run results (this cluster, kube-burner v2.6.1, CirrOS):</strong></blockquote>
+<blockquote>- 2 VMs: VMIRunning P99 = 12s, VMReady P99 = 12s</blockquote>
+<blockquote>- 5 VMs: VMIRunning P99 = 19s, VMReady P99 = 24s</blockquote>
+<p></p>
 <p>When a run times out (VMs never reach <code>Running</code> within 15 minutes) — that is your ceiling. The previous run's VM count is your reliable maximum.</p>
-
-<div class="step-hdr">Step 8 — Watch the dashboards as count increases</div>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Watch the dashboards as count increases</h3>
+<p></p>
 <p><strong>Tab 3 — Observe → Dashboards → KubeVirt / Infrastructure Resources / Top Consumers</strong></p>
-<ul>
+<p></p>
+<p>Switch between:</p>
+<p></p>
 <li><strong>CPU</strong> — watch virt-launcher process count climb with each batch</li>
-<li><strong>Memory</strong> — steady climb as each VM loads into RAM</li>
-</ul>
-<p><strong>Tab 4 — Compute → Nodes</strong><br>
-Watch node memory utilisation. When you see nodes above 80% you are approaching the practical ceiling.</p>
-
-<div class="step-hdr">Step 9 — Clean up</div>
-<pre>oc delete job kb-density-scale -n burner-density-scale 2&gt;/dev/null || true
+<li><strong>Memory</strong> — steady climb as each VM loads 128Mi into RAM</li>
+<p></p>
+<p><strong>Tab 4 — Compute → Nodes</strong>  </p>
+<p>Watch node memory utilisation. When you see nodes above 80% you are approaching the practical ceiling regardless of whether VMs are still booting.</p>
+<p></p>
+<p><strong>What to say at 40+ VMs:</strong> <em>"Look at the memory graph — every one of those steps is a batch of VMs loading onto your nodes. The cluster is handling it. We'll keep going until it can't."</em></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 9 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-density-scale -n burner-density-scale 2&gt;/dev/null || true
 oc delete configmap density-scale-config -n burner-density-scale 2&gt;/dev/null || true
 oc delete vm -l app=burner-scale -n burner-density-scale 2&gt;/dev/null || true
 oc delete project burner-density-scale
 oc delete clusterrole kube-burner-virt
-oc delete clusterrolebinding kube-burner-virt</pre>
-<br><hr><br>
-
+oc delete clusterrolebinding kube-burner-virt</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h2>Escalation ladder reference</h2>
-<table>
-<thead><tr><th>Step</th><th>VM Count</th><th>What to expect</th></tr></thead>
-<tbody>
+<p></p>
+<p></p>
+<tr><td>Step</td><td>VM Count</td><td>What to expect</td></tr>
+<tr><td>----</td><td>--------</td><td>-------------------------------------------</td></tr>
 <tr><td>1</td><td>2</td><td>Baseline — always works</td></tr>
 <tr><td>2</td><td>5</td><td>Comfortable</td></tr>
 <tr><td>3</td><td>10</td><td>Starting to see the cluster work</td></tr>
@@ -448,60 +533,552 @@ oc delete clusterrolebinding kube-burner-virt</pre>
 <tr><td>5</td><td>40</td><td>Heavy — good customer demo point</td></tr>
 <tr><td>6</td><td>80</td><td>Near-limit for most 3-node clusters</td></tr>
 <tr><td>7</td><td>100+</td><td>Ceiling territory</td></tr>
-</tbody>
-</table>
-<br><hr><br>
-
+<p></p>
+<p></p>
+<hr>
+<p></p>
 <h2>Troubleshooting</h2>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead>
-<tbody>
+<p></p>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
+<tr><td>--------------------------------------</td><td>-----------------------------------------------------------------</td></tr>
 <tr><td>VMs stuck in <code>Scheduling</code></td><td>Not enough CPU or RAM — you found the ceiling. Record this count.</td></tr>
 <tr><td>Job times out at <code>maxWaitTimeout: 15m</code></td><td>Ceiling confirmed — note the count and stop here</td></tr>
-<tr><td><code>image pull</code> errors</td><td>Cluster cannot reach <code>quay.io</code> — check pull secrets, or use golden image (Option 2)</td></tr>
+<tr><td><code>image pull</code> errors</td><td>Cluster cannot reach <code>quay.io</code> — check pull secrets</td></tr>
 <tr><td>Nodes show <code>MemoryPressure</code></td><td>Hard ceiling hit — stop and record</td></tr>
 <tr><td><code>virt-controller</code> pod restarting</td><td>You have overloaded the control plane — hard ceiling</td></tr>
-<tr><td>DataVolume clone stuck in <code>Pending</code></td><td>Storage class does not support <code>ReadWriteMany</code> — change to <code>ReadWriteOnce</code> or use a CSI driver that supports cloning</td></tr>
-</tbody>
-</table>
-<br><hr><br>
-
+<p></p>
+<p></p>
+<hr>
+<p></p>
 <h2>Auto-Escalation — Set It and Forget It</h2>
-<p>Instead of running one step at a time and manually increasing the count, you can set up a single config that runs all 8 rounds automatically (2 → 5 → 10 → 25 → 50 → 100 → 200 → 500 VMs). See the <a href="../markdown/14-vm-density-scaling.md">Markdown version</a> for the full multi-round config and bash auto-stop script.</p>
+<p></p>
+<p>Instead of running one step at a time and manually increasing the count, you can set up a single config (or a script) that runs all rounds automatically, prints latency results after each round, and stops itself when the cluster shows pressure. Start it, walk away, come back to results.</p>
+<p></p>
+<h3>The pattern</h3>
+<p></p>
+<pre><code>Round 1: create 2 VMs   → wait for Running → record P99 → delete all
+Round 2: create 5 VMs   → wait for Running → record P99 → delete all
+Round 3: create 10 VMs  → wait for Running → record P99 → delete all
+Round 4: create 25 VMs  → wait for Running → record P99 → delete all
+Round 5: create 50 VMs  → wait for Running → record P99 → delete all
+Round 6: create 100 VMs → wait for Running → record P99 → delete all
+Round 7: create 200 VMs → wait for Running → record P99 → delete all
+Round 8: create 500 VMs → wait for Running → record P99 → delete all
+...stops automatically when the cluster can no longer keep up</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Option A — kube-burner sequential jobs config (recommended)</h3>
+<p></p>
+<p>Create a single config with all rounds pre-built. All rounds run sequentially inside one Job — no manual steps between them. Start it once and walk away.</p>
+<p></p>
+<p><strong>Step 1 — Create the namespace and RBAC</strong> (same as above if not already done):</p>
+<p></p>
+<pre><code>oc new-project burner-escalation
+oc create serviceaccount kube-burner -n burner-escalation</code></pre>
+<p></p>
+<p>The <code>kube-burner-virt</code> ClusterRole was already created in Step 2 of the main guide. Just bind it to this namespace's ServiceAccount:</p>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner-virt-escalation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner-virt
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-escalation
+EOF</code></pre>
+<p></p>
+<blockquote><strong>⏱ Time warning:</strong> A full 8-round run (2 → 500 VMs) can take <strong>3–6+ hours</strong> depending on cluster size. The Job runs inside the cluster so it continues even if you disconnect — monitor with <code>oc logs -f job/kb-escalation -n burner-escalation</code>.</blockquote>
+<p></p>
+<p><strong>Step 2 — Download the config files from the repo (recommended):</strong></p>
+<p></p>
+<p>These files are stored in the repo so you can pull them directly into the web terminal with two commands — no large paste needed:</p>
+<p></p>
+<pre><code>BASE=https://raw.githubusercontent.com/m3ghub/kubeburnerexplained/main/docs/tests/files/14-vm-density-scaling
 
+curl --fail -sL $BASE/vm-template.yml -o /tmp/vm-template.yml &amp;&amp; \
+curl --fail -sL $BASE/auto-escalation-config.yml -o /tmp/auto-escalation-config.yml &amp;&amp; \
+echo "Download OK" || echo "DOWNLOAD FAILED -- use the manual paste fallback below"</code></pre>
+<p></p>
+<p>Verify the files look like YAML (first line should start with <code>apiVersion:</code> or <code>global:</code>):</p>
+<p></p>
+<pre><code>head -1 /tmp/vm-template.yml /tmp/auto-escalation-config.yml</code></pre>
+<p></p>
+<blockquote><strong>Private repo or no internet access?</strong> If you see <code>DOWNLOAD FAILED</code> or the head output shows <code>404:</code> or HTML, the cluster cannot reach the raw file. Use the manual paste fallback below instead.</blockquote>
+<p></p>
+<p><strong>Manual paste fallback — create files by hand</strong></p>
+<p></p>
+<p>Paste each block separately. Do not paste both at once.</p>
+<p></p>
+<p><strong>File 1 of 2 — VM template</strong> (paste this first, press Enter, confirm the prompt returns):</p>
+<p></p>
+<pre><code>cat &gt; /tmp/vm-template.yml &lt;&lt; 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: escalation-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: burner-escalation
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app: burner-escalation
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+EOF</code></pre>
+<p></p>
+<p><strong>File 2 of 2 — Multi-round config</strong> (paste this second, wait for the prompt to return before continuing):</p>
+<p></p>
+<pre><code>cat &gt; /tmp/auto-escalation-config.yml &lt;&lt; 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # ROUND 1: 2 VMs — Baseline
+  # Confirms VMs can boot on this cluster; always expected to pass
+  # CirrOS 128Mi — P99 target &lt; 30s; delete and verify clean slate
+  # ============================================================
+  - name: round-01-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 2
+  - name: round-01-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-01-create
+
+  # ============================================================
+  # ROUND 2: 5 VMs — Comfortable
+  # Scheduler and virt-controller handling routine concurrency
+  # Still well within headroom; dashboards quiet; P99 target &lt; 45s
+  # ============================================================
+  - name: round-02-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 15m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 5
+  - name: round-02-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-02-create
+
+  # ============================================================
+  # ROUND 3: 10 VMs — Starting to see the cluster work
+  # First round where memory and CPU graphs begin to move visibly
+  # Watch Tab 3 (Observe) — you should see a clear step on the chart
+  # ============================================================
+  - name: round-03-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 10
+  - name: round-03-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-03-create
+
+  # ============================================================
+  # ROUND 4: 25 VMs — Moderate pressure
+  # Dashboards start moving clearly; node RAM utilisation climbs
+  # Good demo point: pause here to show Observe tab to audience
+  # ============================================================
+  - name: round-04-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 25
+  - name: round-04-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-04-create
+
+  # ============================================================
+  # ROUND 5: 50 VMs — Heavy load
+  # Nodes will show significant memory utilisation (~6.4Gi for CirrOS)
+  # virt-controller RSS will be elevated; P99 boot time increases
+  # ============================================================
+  - name: round-05-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 50
+  - name: round-05-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-05-create
+
+  # ============================================================
+  # ROUND 6: 100 VMs — Near-limit for most 3-node clusters
+  # Strong customer demo point: "100 VMs on 3 nodes, all Running"
+  # If any VMs stay in Scheduling, you are approaching the ceiling
+  # ============================================================
+  - name: round-06-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 60m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 100
+  - name: round-06-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-06-create
+
+  # ============================================================
+  # ROUND 7: 200 VMs — High density territory
+  # Expect elevated P99 boot times; nodes at 80%+ RAM utilisation
+  # If virt-controller pod restarts, stop here — hard ceiling hit
+  # ============================================================
+  - name: round-07-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 200
+  - name: round-07-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-07-create
+
+  # ============================================================
+  # ROUND 8: 500 VMs — Ceiling discovery
+  # This round is intentionally beyond most clusters' limits
+  # A timeout here documents your ceiling; that IS the result
+  # Record the last clean round count as your reliable maximum
+  # ============================================================
+  - name: round-08-create
+    namespace: burner-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: 500
+  - name: round-08-delete
+    namespace: burner-escalation
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: round-08-create
+EOF</code></pre>
+<p></p>
+<p><strong>Step 3 — Package into a ConfigMap:</strong></p>
+<p></p>
+<pre><code>oc create configmap escalation-config \
+  --from-file=config.yml=/tmp/auto-escalation-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-escalation</code></pre>
+<p></p>
+<p>Expected output:</p>
+<p></p>
+<pre><code>configmap/escalation-config created</code></pre>
+<p></p>
+<p><strong>Step 4 — Launch the Job:</strong></p>
+<p></p>
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-escalation
+  namespace: burner-escalation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=auto-escalation-001]  # change uuid for re-runs
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: escalation-config
+        - name: workdir
+          emptyDir: {}
+EOF</code></pre>
+<p></p>
+<p>When it finishes, grep the full log for all round results:</p>
+<p></p>
+<pre><code>oc logs job/kb-escalation -n burner-escalation | grep "vmiLatency\|Triggering job\|Finished"</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Option B — bash script with auto-stop</h3>
+<p></p>
+<p>For full control with automatic stopping when P99 exceeds your threshold. Paste this into the web terminal and press Enter — it runs every round and stops itself when the cluster shows pressure:</p>
+<p></p>
+<pre><code>#!/bin/bash
+# VM auto-escalation with auto-stop
+# Stops when P99 boot time exceeds MAX_P99 or a round fails
+
+NAMESPACE="burner-escalation"
+MAX_P99=300        # Stop if P99 exceeds 5 minutes (300s)
+ROUNDS=(2 5 10 25 50 100 200 500)
+
+for VM_COUNT in "${ROUNDS[@]}"; do
+  echo ""
+  echo "═══════════════════════════════════════════════════"
+  echo "  ROUND: $VM_COUNT VMs"
+  echo "═══════════════════════════════════════════════════"
+
+  UUID="escalation-$(date +%s)"
+
+  cat &gt; /tmp/escalation-config.yml &lt;&lt; CONFIGEOF
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+jobs:
+  - name: create-vms
+    namespace: ${NAMESPACE}
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: vm-template.yml
+        replicas: ${VM_COUNT}
+  - name: delete-vms
+    namespace: ${NAMESPACE}
+    jobType: delete
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector: {kube-burner-job: create-vms}
+CONFIGEOF
+
+  oc delete configmap escalation-config -n ${NAMESPACE} 2&gt;/dev/null || true
+  oc create configmap escalation-config \
+    --from-file=config.yml=/tmp/escalation-config.yml \
+    --from-file=vm-template.yml=/tmp/vm-template.yml \
+    -n ${NAMESPACE}
+
+  oc delete job kb-escalation -n ${NAMESPACE} 2&gt;/dev/null || true
+  sleep 5
+
+  cat &lt;&lt; JOBYAML | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-escalation
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: escalation-config
+        - name: workdir
+          emptyDir: {}
+JOBYAML
+
+  echo "Waiting for $VM_COUNT VM round to complete..."
+  oc wait --for=condition=complete job/kb-escalation -n ${NAMESPACE} --timeout=60m
+  EXIT_CODE=$?
+
+  if [ $EXIT_CODE -ne 0 ]; then
+    echo "⚠️  Job failed or timed out at $VM_COUNT VMs — stopping escalation"
+    oc logs job/kb-escalation -n ${NAMESPACE} | tail -20
+    break
+  fi
+
+  P99=$(oc logs job/kb-escalation -n ${NAMESPACE} \
+    | grep -oP 'P99=\K[0-9]+' | tail -1)
+
+  echo "Round $VM_COUNT VMs: P99=${P99}s"
+
+  if [ -n "$P99" ] &amp;&amp; [ "$P99" -gt "$MAX_P99" ]; then
+    echo "🛑  P99 exceeded ${MAX_P99}s at $VM_COUNT VMs — ceiling found!"
+    echo "    This is your cluster's practical VM density limit."
+    break
+  fi
+
+  echo "✅  Round complete. Cluster healthy. Escalating..."
+done
+
+echo ""
+echo "Escalation complete. Full summary:"
+oc logs job/kb-escalation -n ${NAMESPACE} | grep "vmiLatency\|round"</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h3>Force-stop a round that is stuck or failing</h3>
-<p>If a round is producing too many errors or VMs are failing to schedule and you don't want to wait for the full <code>maxWaitTimeout</code>, stop immediately:</p>
-<pre># Stop kube-burner from waiting
+<p></p>
+<p>If a round is producing too many errors or VMs are failing to schedule and you do not want to wait for the full <code>maxWaitTimeout</code>, use this to stop immediately and clean up the current round's VMs before moving on:</p>
+<p></p>
+<pre><code># Stop kube-burner from waiting any further
 oc delete job kb-escalation -n burner-escalation
 
-# Delete VMs from the stuck round (change round-08 to whichever round is stuck)
-oc delete vm -l kube-burner.io/job=round-08-create -n burner-escalation</pre>
-<pre># Watch them clear
-oc get vm -n burner-escalation -w</pre>
-<div class="note"><strong>What the failure count tells you:</strong> If a round creates N VMs but M fail to schedule, your ceiling is approximately N − M. The last fully clean round is your documented reliable maximum.</div>
-<table>
-<thead><tr><th>What you saw</th><th>What it means</th></tr></thead>
-<tbody>
+# Delete all VMs from the current round (replace round-08 with whichever round is stuck)
+oc delete vm -l kube-burner.io/job=round-08-create -n burner-escalation</code></pre>
+<p></p>
+<p>Watch them clear:</p>
+<p></p>
+<pre><code>oc get vm -n burner-escalation -w</code></pre>
+<p></p>
+<blockquote><strong>What the failure count tells you:</strong> If a round creates N VMs but M fail to schedule, your ceiling is approximately N − M. The last clean round (all VMs reached Running) is your documented reliable maximum.</blockquote>
+<p></p>
+<p></p>
+<tr><td>What you saw</td><td>What it means</td></tr>
+<tr><td>--------------------------------</td><td>-----------------------------------------------------------------</td></tr>
 <tr><td>All VMs Running</td><td>Cluster handled it — continue to the next round</td></tr>
 <tr><td>Some VMs stuck in <code>Scheduling</code></td><td>CPU or RAM ceiling hit — stop here, record the last clean count</td></tr>
-<tr><td>Many VMs in <code>ImagePullBackOff</code></td><td>Image pull issue, not a capacity ceiling — fix pull secrets first</td></tr>
+<tr><td>Many VMs in <code>ImagePullBackOff</code></td><td>Image pull issue — not a capacity ceiling, fix pull secrets first</td></tr>
 <tr><td><code>virt-controller</code> pod restarting</td><td>Control plane overloaded — hard ceiling, stop immediately</td></tr>
-</tbody>
-</table>
-<p>After force-stopping, do <strong>not</strong> re-run earlier rounds. The ceiling has been found. Proceed straight to clean-up below.</p>
-
+<p></p>
+<p></p>
+<p>After force-stopping, you do <strong>not</strong> need to re-run earlier rounds. The ceiling has been found. Proceed straight to the clean-up below.</p>
+<p></p>
+<hr>
+<p></p>
 <h3>Clean up after auto-escalation</h3>
-<p>When the run completes or stops early, clean up everything the auto-escalation section created:</p>
-<pre>oc delete job kb-escalation -n burner-escalation 2&gt;/dev/null || true
+<p></p>
+<p>When you are done — whether the run completed all 8 rounds or stopped early — clean up everything the auto-escalation section created:</p>
+<p></p>
+<pre><code>oc delete job kb-escalation -n burner-escalation 2&gt;/dev/null || true
 oc delete configmap escalation-config -n burner-escalation 2&gt;/dev/null || true
 oc delete vm -l app=burner-escalation -n burner-escalation 2&gt;/dev/null || true
 oc delete project burner-escalation
-oc delete clusterrolebinding kube-burner-virt-escalation</pre>
-<div class="note">The <code>kube-burner-virt</code> ClusterRole is shared with the main test — do not delete it here. It is removed in Step 9 of the main guide.</div>
-
-<div class="footer">
-  <p>Kube-Burner v2.6.1 | OpenShift Virtualization | <a href="https://kube-burner.github.io/kube-burner/latest/">kube-burner docs</a></p>
-  <p>Next: <a href="15-vm-churn.html">Test 15 — VM Churn</a></p>
-</div>
-</body>
-</html>
+oc delete clusterrolebinding kube-burner-virt-escalation</code></pre>
+<p></p>
+<blockquote>The <code>kube-burner-virt</code> ClusterRole is shared with the main test — do not delete it here. It is removed in Step 9 of the main guide if you ran that first.</blockquote>
+<p></p>
+<hr>
+<p></p>
+<p><em>Next test: <a href="16-vm-pause-unpause.md">Test 16 — VM Pause/Unpause Storm</a></em></p>
+</body></html>

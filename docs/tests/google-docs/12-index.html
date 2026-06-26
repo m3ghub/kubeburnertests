@@ -1,83 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Test 12: Index Metrics — Save Your Report Card</title>
-  <!--
-    GOOGLE DOCS IMPORT:
-    1. Go to https://docs.google.com
-    2. File > Open > Upload > select this file
-  -->
-  <style>
-  body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.6;color:#202124;max-width:820px;margin:40px auto;padding:0 24px}
-  h1{font-size:22pt;color:#1a1a1a;margin-top:0}
-  h2{font-size:15pt;color:#1a1a1a;border-bottom:1px solid #dadce0;padding-bottom:4px;margin-top:28px}
-  h3{font-size:12pt;color:#1a1a1a;margin-top:20px}
-  h4{font-size:11pt;color:#3c4043;margin-top:14px}
-  p{margin:8px 0}a{color:#1a73e8}
-  .meta{color:#5f6368;font-size:10pt;margin-bottom:20px}
-  .note{border-left:4px solid #1a73e8;background:#e8f0fe;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .warn{border-left:4px solid #f9ab00;background:#fef7e0;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  .tip{border-left:4px solid #188038;background:#e6f4ea;padding:10px 16px;margin:14px 0;border-radius:0 4px 4px 0}
-  pre{background:#f8f9fa;border:1px solid #dadce0;border-radius:4px;padding:12px 16px;font-family:"Courier New",monospace;font-size:9.5pt;overflow-x:auto;line-height:1.5;white-space:pre}
-  code{font-family:"Courier New",monospace;font-size:9.5pt;background:#f1f3f4;padding:1px 4px;border-radius:3px}
-  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:10.5pt}
-  thead tr{background:#1a73e8;color:#fff}
-  thead th{padding:9px 12px;text-align:left;font-weight:bold}
-  tbody tr:nth-child(even){background:#f8f9fa}
-  tbody tr:nth-child(odd){background:#fff}
-  tbody td{padding:7px 12px;border-bottom:1px solid #dadce0;vertical-align:top}
-  ul,ol{margin:8px 0 8px 24px}li{margin:4px 0}
-  hr{border:none;border-top:1px solid #dadce0;margin:28px 0}
-  .footer{margin-top:40px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368;font-size:9.5pt}
-  .badge{display:inline-block;background:#e8f0fe;color:#1a73e8;border-radius:12px;padding:2px 10px;font-size:9pt;margin-right:6px;font-weight:bold}
-  .step-hdr{background:#1a73e8;color:#fff;padding:7px 16px;border-radius:4px;font-size:11.5pt;font-weight:bold;margin:20px 0 10px}
-</style>
-</head>
-<body>
+<!DOCTYPE html><html><head><meta charset='utf-8'><style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:40px auto;line-height:1.6}
+pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px}
+th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+</style></head><body>
 <h1>Test 12: Index Metrics — Save Your Report Card</h1>
-<br>
-<div class="note"><strong>Difficulty:</strong> ⭐⭐ Intermediate  </div>
-<div class="note"><strong>Time to run:</strong> ~3 minutes  </div>
-<div class="note"><strong>What it does:</strong> Collects metrics from Prometheus after a benchmark and saves them to an indexer (like Elasticsearch or a local file) so you can compare results over time</div>
-<div class="note"><strong>Requires:</strong> Prometheus running in the cluster</div>
-<br>
+<p></p>
+<blockquote><strong>Difficulty:</strong> ⭐⭐ Intermediate  </blockquote>
+<blockquote><strong>Time to run:</strong> ~3 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Collects metrics from Prometheus after a benchmark and saves them to an indexer (like Elasticsearch or a local file) so you can compare results over time</blockquote>
+<blockquote><strong>Requires:</strong> Prometheus running in the cluster</blockquote>
+<p></p>
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong>.</blockquote>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What is this test? 📊</h2>
-<br>
+<p></p>
 <p>After a test at school, you get a report card showing your scores. You can look at it weeks later and compare: <em>"Did I get better at maths since last term?"</em></p>
-<br>
+<p></p>
 <p><strong>Index Metrics</strong> is kube-burner's report card system.  </p>
 <p>After a benchmark runs, it:</p>
-<li>Queries Prometheus for the metrics you care about (CPU, memory, API latency, etc.)</li>
-<li>Saves them to a storage system (Elasticsearch, OpenSearch, or a local JSON file)</li>
-<li>Lets you compare results across different runs over time</li>
-<br>
+<p>1. Queries Prometheus for the metrics you care about (CPU, memory, API latency, etc.)</p>
+<p>2. Saves them to a storage system (Elasticsearch, OpenSearch, or a local JSON file)</p>
+<p>3. Lets you compare results across different runs over time</p>
+<p></p>
 <p>Even without a full Elasticsearch setup, you can save results locally as JSON files — which is what this guide does.</p>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>What does it collect?</h2>
-<br>
+<p></p>
 <p>The metrics are defined in a <strong>metrics profile</strong> YAML file. You can collect anything Prometheus tracks:</p>
-<br>
-<table>
-<thead><tr><th>Metric category</th><th>Example PromQL query</th></tr></thead><tbody>
+<p></p>
+<tr><td>Metric category</td><td>Example PromQL query</td></tr>
 <tr><td><strong>API server latency</strong></td><td><code>histogram_quantile(0.99, rate(apiserver_request_duration_seconds_bucket[5m]))</code></td></tr>
 <tr><td><strong>Node CPU usage</strong></td><td><code>rate(node_cpu_seconds_total{mode!="idle"}[5m])</code></td></tr>
 <tr><td><strong>Node memory</strong></td><td><code>node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes</code></td></tr>
 <tr><td><strong>Scheduler latency</strong></td><td><code>histogram_quantile(0.99, rate(scheduler_e2e_scheduling_duration_seconds_bucket[5m]))</code></td></tr>
 <tr><td><strong>etcd disk</strong></td><td><code>rate(etcd_disk_wal_fsync_duration_seconds_sum[5m])</code></td></tr>
-</tbody></table>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>How it works</h2>
-<br>
-<pre>
-  After benchmark runs:
+<p></p>
+<pre><code>  After benchmark runs:
 
   Prometheus ──► stores all metrics
       │
@@ -92,56 +60,48 @@
       │
       ▼
   Output: benchmark-results-&lt;uuid&gt;.json
-  (Can also go to Elasticsearch for dashboards)
-</pre>
-<br>
+  (Can also go to Elasticsearch for dashboards)</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Before you start ✅</h2>
-<br>
+<p></p>
 <li>[ ] kube-burner installed</li>
 <li>[ ] Logged in as cluster-admin</li>
 <li>[ ] RBAC applied</li>
 <li>[ ] Prometheus running (<code>oc get pods -n openshift-monitoring | grep prometheus-k8s</code>)</li>
 <li>[ ] A benchmark has been run recently (gives Prometheus data to collect)</li>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Step-by-step guide</h2>
-<br>
-<div class="step-hdr">Step 1 — Create the namespace</div>
-<br>
-<div class="note"><strong>Do this first — every other step depends on it.</strong></div>
-<br>
-<pre>
-oc new-project burner-index
-</pre>
-<br>
+<p></p>
+<h3>Step 1 — Create the namespace</h3>
+<p></p>
+<blockquote><strong>Do this first — every other step depends on it.</strong></blockquote>
+<p></p>
+<pre><code>oc new-project burner-index</code></pre>
+<p></p>
 <p>You should see:</p>
-<pre>
-Now using project "burner-index" on server "https://api.&lt;your-cluster&gt;:6443"
-</pre>
-<br>
-<div class="note"><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</div>
-<br>
+<pre><code>Now using project "burner-index" on server "https://api.&lt;your-cluster&gt;:6443"</code></pre>
+<p></p>
+<blockquote><strong>OpenShift only:</strong> Never use <code>kube-</code> at the start of the name — it is reserved by the system and will be rejected.</blockquote>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 2 — Set up RBAC</div>
-<br>
+<p></p>
+<h3>Step 2 — Set up RBAC</h3>
+<p></p>
 <p>Every test needs a <code>ServiceAccount</code>, <code>ClusterRole</code>, and <code>ClusterRoleBinding</code>. Run all three commands — they are safe to re-run if any already exist.</p>
-<br>
+<p></p>
 <p><strong>2a — Create the ServiceAccount in this namespace:</strong></p>
-<br>
-<pre>
-oc create serviceaccount kube-burner -n burner-index 2&gt;/dev/null || true
-</pre>
-<br>
+<p></p>
+<pre><code>oc create serviceaccount kube-burner -n burner-index 2&gt;/dev/null || true</code></pre>
+<p></p>
 <p><strong>2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):</strong></p>
-<br>
-<div class="note">These are applied inline below — no local file needed. Safe to re-run at any time.</div>
-<br>
-<pre>
-oc apply -f - &lt;&lt;'EOF'
+<p></p>
+<blockquote>These are applied inline below — no local file needed. Safe to re-run at any time.</blockquote>
+<p></p>
+<pre><code>oc apply -f - &lt;&lt;'EOF'
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -175,36 +135,30 @@ subjects:
   - kind: ServiceAccount
     name: kube-burner
     namespace: burner-index
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <p><strong>2c — Add this namespace to the ClusterRoleBinding:</strong></p>
-<br>
-<pre>
-oc patch clusterrolebinding kube-burner \
+<p></p>
+<pre><code>oc patch clusterrolebinding kube-burner \
   --type=json \
-  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-index"}}]' 2&gt;/dev/null || true
-</pre>
-<br>
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-index"}}]' 2&gt;/dev/null || true</code></pre>
+<p></p>
 <p><strong>Verify all three are in place before continuing:</strong></p>
-<br>
-<pre>
-oc get serviceaccount kube-burner -n burner-index
+<p></p>
+<pre><code>oc get serviceaccount kube-burner -n burner-index
 oc get clusterrole kube-burner
-oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
-</pre>
-<br>
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'</code></pre>
+<p></p>
 <p>The last command should include <code>burner-index</code> in the output.</p>
-<br>
-<div class="step-hdr">Step 3 — Create the metrics profile</div>
-<br>
+<p></p>
+<h3>Step 3 — Create the metrics profile</h3>
+<p></p>
 <p>Create <code>metrics.yml</code> — this is the list of Prometheus queries to run:</p>
-<br>
-<div class="note"><strong>Important:</strong> The <code>index</code> subcommand requires a <strong>plain YAML list</strong> (starting with <code>-</code>).</div>
-<div class="note">Do NOT wrap it under a <code>metrics:</code> key — that causes a parse error.</div>
-<br>
-<pre>
-cat &gt; /tmp/metrics.yml &lt;&lt; 'EOF'
+<p></p>
+<blockquote><strong>Important:</strong> The <code>index</code> subcommand requires a <strong>plain YAML list</strong> (starting with <code>-</code>).</blockquote>
+<blockquote>Do NOT wrap it under a <code>metrics:</code> key — that causes a parse error.</blockquote>
+<p></p>
+<pre><code>cat &gt; /tmp/metrics.yml &lt;&lt; 'EOF'
 - query: histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket{verb!="WATCH"}[2m])) by (le))
   metricName: apiserver99thLatency
 
@@ -222,27 +176,23 @@ cat &gt; /tmp/metrics.yml &lt;&lt; 'EOF'
 
 - query: sum(kubelet_running_pods) by (node)
   metricName: runningPodsPerNode
-EOF
-</pre>
-<br>
+EOF</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 4 — Store the metrics profile as a ConfigMap</div>
-<br>
-<pre>
-oc create configmap index-config \
+<p></p>
+<h3>Step 4 — Store the metrics profile as a ConfigMap</h3>
+<p></p>
+<pre><code>oc create configmap index-config \
   --from-file=metrics.yml=metrics.yml \
-  -n burner-index
-</pre>
-<br>
+  -n burner-index</code></pre>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 5 — Run the indexer</div>
-<br>
+<p></p>
+<h3>Step 5 — Run the indexer</h3>
+<p></p>
 <p>You need your Prometheus URL and token:</p>
-<br>
-<pre>
-PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
+<p></p>
+<pre><code>PROMETHEUS_URL=$(oc get route prometheus-k8s -n openshift-monitoring \
   -o jsonpath='{.spec.host}')
 PROMETHEUS_TOKEN=$(oc create token prometheus-k8s -n openshift-monitoring --duration=1h)
 
@@ -287,23 +237,19 @@ spec:
             name: index-config
         - name: workdir
           emptyDir: {}
-EOF
-</pre>
-<br>
-<div class="note"><strong>Note:</strong> The <code>--start</code> and <code>--end</code> flags tell kube-burner the time window to query. Here we ask for the last 1 hour. Adjust to match when your benchmark ran.</div>
-<br>
+EOF</code></pre>
+<p></p>
+<blockquote><strong>Note:</strong> The <code>--start</code> and <code>--end</code> flags tell kube-burner the time window to query. Here we ask for the last 1 hour. Adjust to match when your benchmark ran.</blockquote>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 6 — Read the output</div>
-<br>
-<pre>
-oc logs job/kb-index -n burner-index
-</pre>
-<br>
+<p></p>
+<h3>Step 6 — Read the output</h3>
+<p></p>
+<pre><code>oc logs job/kb-index -n burner-index</code></pre>
+<p></p>
 <p>Expected output:</p>
-<br>
-<pre>
-time="..." level=info msg="Indexing metric: apiserver99thLatency"
+<p></p>
+<pre><code>time="..." level=info msg="Indexing metric: apiserver99thLatency"
 time="..." level=info msg="  → 42 data points collected"
 time="..." level=info msg="Indexing metric: controlPlaneCPU"
 time="..." level=info msg="  → 87 data points collected"
@@ -311,60 +257,48 @@ time="..." level=info msg="Indexing metric: nodeCPUUsage"
 time="..." level=info msg="  → 156 data points collected"
 time="..." level=info msg="Indexing metric: runningPodsPerNode"
 time="..." level=info msg="  → 18 data points collected"
-time="..." level=info msg="Indexing complete. UUID: index-run-001"
-</pre>
-<br>
+time="..." level=info msg="Indexing complete. UUID: index-run-001"</code></pre>
+<p></p>
 <p>The data is now saved. In a full setup with Elasticsearch/OpenSearch, you would see it in Kibana/Grafana dashboards.</p>
-<br>
+<p></p>
 <hr>
-<br>
-<div class="step-hdr">Step 7 — Clean up</div>
-<br>
-<pre>
-oc delete job kb-index -n burner-index
+<p></p>
+<h3>Step 7 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-index -n burner-index
 oc delete configmap index-config -n burner-index
-oc delete project burner-index
-</pre>
-<br>
+oc delete project burner-index</code></pre>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Sending results to Elasticsearch (optional)</h2>
-<br>
+<p></p>
 <p>If you have an Elasticsearch cluster, add the indexer config to your benchmark's <code>global</code> section:</p>
-<br>
-<pre>
-global:
+<p></p>
+<pre><code>global:
   indexerConfig:
     type: elastic
     servers:
       - https://my-elasticsearch:9200
     defaultIndex: kube-burner
     username: elastic
-    password: mypassword
-</pre>
-<br>
+    password: mypassword</code></pre>
+<p></p>
 <p>This sends all metrics automatically as the benchmark runs — no separate <code>index</code> command needed.</p>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <h2>Troubleshooting</h2>
-<br>
-<table>
-<thead><tr><th>Problem</th><th>Fix</th></tr></thead><tbody>
+<p></p>
+<tr><td>Problem</td><td>Fix</td></tr>
 <tr><td><code>cannot unmarshal !!map into []prometheus.metricDefinition</code></td><td>Your <code>metrics.yml</code> starts with <code>metrics:</code> — remove that wrapper, the file must be a plain list starting with <code>-</code></td></tr>
-<tr><td><code>no such route prometheus-k8s</code></td><td>Use `oc get routes -A \</td><td>grep prometheus` to find the real URL</td></tr>
+<tr><td><code>no such route prometheus-k8s</code></td><td>Use <code>oc get routes -A \</td><td>grep prometheus</code> to find the real URL</td></tr>
 <tr><td><code>401 Unauthorized</code></td><td>Token expired — recreate with <code>oc create token prometheus-k8s -n openshift-monitoring --duration=1h</code></td></tr>
 <tr><td><code>0 data points</code> for a metric</td><td>Prometheus may not have that metric; check in the Prometheus UI</td></tr>
 <tr><td>Very long index time</td><td>Shorten the time window with <code>--start</code> / <code>--end</code></td></tr>
-</tbody></table>
-<br>
+<p></p>
 <hr>
-<br>
+<p></p>
 <p><em>You have completed all 12 tests! Go back to the <a href="README.md">Test Index</a> for a summary.</em></p>
-<br>
-<div class="footer">
-  Kube-Burner v2.6.1 &mdash; Test Guide &mdash; 12-index<br>
-  Source: <a href="https://github.com/kube-burner/kube-burner">github.com/kube-burner/kube-burner</a>
-</div>
-</body>
-</html>
+<p></p>
+</body></html>

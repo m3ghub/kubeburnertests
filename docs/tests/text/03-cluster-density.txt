@@ -1,509 +1,412 @@
-================================================================================
-                             KUBE-BURNER TEST GUIDE                             
-                               03-CLUSTER-DENSITY                               
-================================================================================
-  Kube-Burner v2.6.1 | Product: OpenShift / Kubernetes
-  Source: github.com/kube-burner/kube-burner
-================================================================================
+Test 03: Cluster Density — Building a Whole Town of Apps
 
+> Difficulty: ⭐⭐ Intermediate  
+> Time to run: ~15 minutes  
+> What it does: Creates complete application stacks (Deployments, Services, ConfigMaps, Secrets, Routes) across many namespaces to simulate a real production cluster
 
-================================================================================
-            TEST 03: CLUSTER DENSITY — BUILDING A WHOLE TOWN OF APPS            
-================================================================================
+> ⚡ Pre-flight required: Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see 00-preflight.md (00-preflight.md).
 
+---
 
+What is this test? 🏙️
 
-  NOTE: Difficulty: ⭐⭐ Intermediate  
+Imagine your Kubernetes cluster is a city. Each namespace is a neighbourhood.  
+Each neighbourhood has houses (Pods), roads (Services), signs (ConfigMaps), and locked gates (Secrets).
 
+Cluster Density builds many entire neighbourhoods all at once to see how well your city handles real growth.
 
-  NOTE: Time to run: ~15 minutes  
+This is the most realistic test because it creates the same types of objects a real application team would deploy — not just plain pods.
 
+---
 
-  NOTE: What it does: Creates complete application stacks (Deployments, Services, ConfigMaps, Secrets, Routes) across many namespaces to simulate a real production cluster
+What does it measure?
 
+| Metric | What it means |
+|---|---|
+| Pod scheduling latency | How fast pods land on nodes |
+| Service endpoint sync | How fast kube-proxy updates routing rules |
+| API server throughput | How many objects/second the API server handles |
+| etcd write latency | How fast the cluster database saves all these objects |
 
---------------------------------------------------------------------------------
+---
 
+How it works
 
---------------------------------------------------------------------------------
-  WHAT IS THIS TEST? 🏙️
---------------------------------------------------------------------------------
+`
+kube-burner creates N iterations. Each iteration = one namespace full of:
 
+  Namespace: burner-cluster-density-0
+  ┌──────────────────────────────────────────────────────────┐
+  │  Deployment ──► 1 Pod 🟢                                 │
+  │  Service    ──► routes traffic to the pod                │
+  │  ConfigMap  ──► holds app configuration                  │
+  │  Secret     ──► holds passwords/tokens                   │
+  └──────────────────────────────────────────────────────────┘
 
-Imagine your Kubernetes cluster is a city. Each namespace is a neighbourhood.
-Each neighbourhood has houses (Pods), roads (Services), signs (ConfigMaps), and
-locked gates (Secrets).
+  Namespace: burner-cluster-density-1
+  ┌──────────────────────────────────────────────────────────┐
+  │  Deployment + Service + ConfigMap + Secret               │
+  └──────────────────────────────────────────────────────────┘
 
-Cluster Density builds many entire neighbourhoods all at once to see how well
-your city handles real growth.
+  ... repeated for N namespaces ...
 
-This is the most realistic test because it creates the same types of objects a
-real application team would deploy — not just plain pods.
+  Result: the cluster is running like a real production system 🏙️
+`
 
---------------------------------------------------------------------------------
+---
 
+Before you start ✅
 
---------------------------------------------------------------------------------
-  WHAT DOES IT MEASURE?
---------------------------------------------------------------------------------
+- [ ] kube-burner installed
+- [ ] Logged in as cluster-admin
+- [ ] RBAC applied
+- [ ] Cluster has at least 3 worker nodes
+- [ ] At least 15 minutes to run and observe
+- [ ] Enough free CPU: ~1m CPU and ~10Mi memory per namespace
 
+---
 
-
-  +------------------------+-------------------------------------------------------+
-  | Metric                 | What it means                                         |
-  +------------------------+-------------------------------------------------------+
-  | Pod scheduling latency | How fast pods land on nodes                           |
-  | Service endpoint sync  | How fast kube-proxy updates routing rules             |
-  | API server throughput  | How many objects/second the API server handles        |
-  | etcd write latency     | How fast the cluster database saves all these objects |
-  +------------------------+-------------------------------------------------------+
-
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  HOW IT WORKS
---------------------------------------------------------------------------------
-
-
-
-    kube-burner creates N iterations. Each iteration = one namespace full of:
-    
-      Namespace: burner-cluster-density-0
-      ┌──────────────────────────────────────────────────────────┐
-      │  Deployment ──► 1 Pod 🟢                                 │
-      │  Service    ──► routes traffic to the pod                │
-      │  ConfigMap  ──► holds app configuration                  │
-      │  Secret     ──► holds passwords/tokens                   │
-      └──────────────────────────────────────────────────────────┘
-    
-      Namespace: burner-cluster-density-1
-      ┌──────────────────────────────────────────────────────────┐
-      │  Deployment + Service + ConfigMap + Secret               │
-      └──────────────────────────────────────────────────────────┘
-    
-      ... repeated for N namespaces ...
-    
-      Result: the cluster is running like a real production system 🏙️
-
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  BEFORE YOU START ✅
---------------------------------------------------------------------------------
-
-
-  [ ] kube-burner installed
-  [ ] Logged in as cluster-admin
-  [ ] RBAC applied
-  [ ] Cluster has at least 3 worker nodes
-  [ ] At least 15 minutes to run and observe
-  [ ] Enough free CPU: ~1m CPU and ~10Mi memory per namespace
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  STEP-BY-STEP GUIDE
---------------------------------------------------------------------------------
-
-
+Step-by-step guide
 
 Step 1 — Create the namespace
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+> Do this first — every other step depends on it.
 
-
-  NOTE: Do this first — every other step depends on it.
-
-
-
-    oc new-project burner-cluster-density
-
+`bash
+oc new-project burner-cluster-density
+`
 
 You should see:
+`
+Now using project "burner-cluster-density" on server "https://api.<your-cluster>:6443"
+`
 
-    Now using project "burner-cluster-density" on server "https://api.<your-cluster>:6443"
-
-
-
-  NOTE: OpenShift only: Never use kube- at the start of the name — it is reserved by the system and will be rejected.
-
-
+> OpenShift only: Never use kube- at the start of the name — it is reserved by the system and will be rejected.
 
 Step 2 — Set up RBAC
-~~~~~~~~~~~~~~~~~~~~
 
-
-Every test needs a ServiceAccount, ClusterRole, and ClusterRoleBinding. Run all
-three commands — they are safe to re-run if any already exist.
+Every test needs a ServiceAccount, ClusterRole, and ClusterRoleBinding. Run all three commands — they are safe to re-run if any already exist.
 
 2a — Create the ServiceAccount in this namespace:
 
-
-    oc create serviceaccount kube-burner -n burner-cluster-density \
-      --dry-run=client -o yaml | oc apply -f -
-
+`bash
+oc create serviceaccount kube-burner -n burner-cluster-density \
+  --dry-run=client -o yaml | oc apply -f -
+`
 
 2b — Apply the ClusterRole and ClusterRoleBinding (once per cluster):
 
+> These are applied inline below — no local file needed. Safe to re-run at any time.
 
-  NOTE: These are applied inline below — no local file needed. Safe to re-run at any time.
-
-
-
-    oc apply -f - <<'EOF'
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRole
-    metadata:
-      name: kube-burner
-    rules:
-      - apiGroups: [""]
-        resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [apps]
-        resources: [deployments, replicasets, statefulsets, daemonsets]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [batch]
-        resources: [jobs]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [networking.k8s.io]
-        resources: [networkpolicies, ingresses]
-        verbs: [get, list, watch, create, delete, update, patch]
-      - apiGroups: [kubevirt.io]
-        resources: [virtualmachines, virtualmachineinstances]
-        verbs: [get, list, watch, create, delete, update, patch]
-    ---
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: ClusterRoleBinding
-    metadata:
-      name: kube-burner
-    roleRef:
-      apiGroup: rbac.authorization.k8s.io
-      kind: ClusterRole
-      name: kube-burner
-    subjects:
-      - kind: ServiceAccount
-        name: kube-burner
-        namespace: burner-cluster-density
-    EOF
-
+`bash
+oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events, replicationcontrollers, serviceaccounts]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [networking.k8s.io]
+    resources: [networkpolicies, ingresses]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-cluster-density
+EOF
+`
 
 2c — Add this namespace to the ClusterRoleBinding:
 
+`bash
+oc patch clusterrolebinding kube-burner \
+  --type=json \
+  -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-cluster-density"}}]' 2>/dev/null || true
+`
 
-    oc patch clusterrolebinding kube-burner \
-      --type=json \
-      -p='[{"op":"add","path":"/subjects/-","value":{"kind":"ServiceAccount","name":"kube-burner","namespace":"burner-cluster-density"}}]' 2>/dev/null || true
-
-
-
-  NOTE: The || true at the end means this command will not fail if the namespace is already listed. It is safe to run every time.
-
+> The || true at the end means this command will not fail if the namespace is already listed. It is safe to run every time.
 
 Verify all three are in place before continuing:
 
-
-    oc get serviceaccount kube-burner -n burner-cluster-density
-    oc get clusterrole kube-burner
-    oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
-
+`bash
+oc get serviceaccount kube-burner -n burner-cluster-density
+oc get clusterrole kube-burner
+oc get clusterrolebinding kube-burner -o jsonpath='{.subjects[*].namespace}'
+`
 
 The last command should include burner-cluster-density in the output.
 
-
 Step 3 — Create the workload config
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 
 Create cluster-density-config.yml:
 
+`bash
+cat > /tmp/cluster-density-config.yml << 'EOF'
+global:
+  gc: true
+  measurements:
+    - name: podLatency
 
-    cat > /tmp/cluster-density-config.yml << 'EOF'
-    global:
-      gc: true
-      measurements:
-        - name: podLatency
-    
-    jobs:
-      - name: cluster-density
-        namespace: burner-cluster-density
-        jobType: create
-        jobIterations: 5
-        qps: 20
-        burst: 20
-        namespacedIterations: true
-        objects:
-          - objectTemplate: deployment.yml
-            replicas: 1
-          - objectTemplate: service.yml
-            replicas: 1
-          - objectTemplate: configmap.yml
-            replicas: 2
-          - objectTemplate: secret.yml
-            replicas: 1
-        waitWhenFinished: true
-        podWait: true
-        maxWaitTimeout: 10m
-    EOF
-
+jobs:
+  - name: cluster-density
+    namespace: burner-cluster-density
+    jobType: create
+    jobIterations: 5
+    qps: 20
+    burst: 20
+    namespacedIterations: true
+    objects:
+      - objectTemplate: deployment.yml
+        replicas: 1
+      - objectTemplate: service.yml
+        replicas: 1
+      - objectTemplate: configmap.yml
+        replicas: 2
+      - objectTemplate: secret.yml
+        replicas: 1
+    waitWhenFinished: true
+    podWait: true
+    maxWaitTimeout: 10m
+EOF
+`
 
 Create deployment.yml:
 
-
-    cat > /tmp/deployment.yml << 'EOF'
-    apiVersion: apps/v1
-    kind: Deployment
+`bash
+cat > /tmp/deployment.yml << 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: burner-app-{{.Iteration}}
+  labels:
+    app: burner-app-{{.Iteration}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: burner-app-{{.Iteration}}
+  template:
     metadata:
-      name: burner-app-{{.Iteration}}
       labels:
         app: burner-app-{{.Iteration}}
     spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: burner-app-{{.Iteration}}
-      template:
-        metadata:
-          labels:
-            app: burner-app-{{.Iteration}}
-        spec:
-          containers:
-            - name: app
-              image: registry.k8s.io/pause:3.9
-              resources:
-                requests:
-                  cpu: 1m
-                  memory: 10Mi
-    EOF
-
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 1m
+              memory: 10Mi
+EOF
+`
 
 Create service.yml:
 
-
-    cat > /tmp/service.yml << 'EOF'
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: burner-svc-{{.Iteration}}
-    spec:
-      selector:
-        app: burner-app-{{.Iteration}}
-      ports:
-        - port: 80
-          targetPort: 80
-    EOF
-
+`bash
+cat > /tmp/service.yml << 'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: burner-svc-{{.Iteration}}
+spec:
+  selector:
+    app: burner-app-{{.Iteration}}
+  ports:
+    - port: 80
+      targetPort: 80
+EOF
+`
 
 Create configmap.yml:
 
-
-    cat > /tmp/configmap.yml << 'EOF'
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: burner-cm-{{.Iteration}}-{{.Replica}}
-    data:
-      app.config: |
-        environment=production
-        version={{.Iteration}}
-        replica={{.Replica}}
-    EOF
-
+`bash
+cat > /tmp/configmap.yml << 'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: burner-cm-{{.Iteration}}-{{.Replica}}
+data:
+  app.config: |
+    environment=production
+    version={{.Iteration}}
+    replica={{.Replica}}
+EOF
+`
 
 Create secret.yml:
 
+`bash
+cat > /tmp/secret.yml << 'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: burner-secret-{{.Iteration}}
+type: Opaque
+data:
+  password: dGVzdHBhc3N3b3Jk
+EOF
+`
 
-    cat > /tmp/secret.yml << 'EOF'
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: burner-secret-{{.Iteration}}
-    type: Opaque
-    data:
-      password: dGVzdHBhc3N3b3Jk
-    EOF
-
-
---------------------------------------------------------------------------------
-
+---
 
 Step 4 — Package into a ConfigMap
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+`bash
+oc create configmap cluster-density-config \
+  --from-file=config.yml=/tmp/cluster-density-config.yml \
+  --from-file=deployment.yml=/tmp/deployment.yml \
+  --from-file=service.yml=/tmp/service.yml \
+  --from-file=configmap.yml=/tmp/configmap.yml \
+  --from-file=secret.yml=/tmp/secret.yml \
+  -n burner-cluster-density
+`
 
-
-    oc create configmap cluster-density-config \
-      --from-file=config.yml=/tmp/cluster-density-config.yml \
-      --from-file=deployment.yml=/tmp/deployment.yml \
-      --from-file=service.yml=/tmp/service.yml \
-      --from-file=configmap.yml=/tmp/configmap.yml \
-      --from-file=secret.yml=/tmp/secret.yml \
-      -n burner-cluster-density
-
-
---------------------------------------------------------------------------------
-
+---
 
 Step 5 — Run the test!
-~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-    cat <<'EOF' | oc apply -f -
-    apiVersion: batch/v1
-    kind: Job
-    metadata:
-      name: kb-cluster-density
-      namespace: burner-cluster-density
+`bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-cluster-density
+  namespace: burner-cluster-density
+spec:
+  backoffLimit: 0
+  template:
     spec:
-      backoffLimit: 0
-      template:
-        spec:
-          serviceAccountName: kube-burner
-          restartPolicy: Never
-          initContainers:
-            - name: copy-config
-              image: quay.io/kube-burner/kube-burner:v2.6.1
-              command: [sh, -c, "cp /config-src/* /config/"]
-              volumeMounts:
-                - {name: config-src, mountPath: /config-src}
-                - {name: workdir,    mountPath: /config}
-          containers:
-            - name: kube-burner
-              image: quay.io/kube-burner/kube-burner:v2.6.1
-              workingDir: /config
-              command:
-                - kube-burner
-                - init
-                - -c
-                - /config/config.yml
-                - --uuid=cluster-density-001
-              volumeMounts:
-                - {name: workdir, mountPath: /config}
-          volumes:
-            - name: config-src
-              configMap:
-                name: cluster-density-config
-            - name: workdir
-              emptyDir: {}
-    EOF
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=cluster-density-001
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: cluster-density-config
+        - name: workdir
+          emptyDir: {}
+EOF
+`
 
-
---------------------------------------------------------------------------------
-
+---
 
 Step 6 — Watch the namespaces appear
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+`bash
+Count namespaces being created
+watch "oc get namespaces | grep burner-cluster-density | wc -l"
 
+See all objects in one namespace
+oc get all -n burner-cluster-density-0
+`
 
-    # Count namespaces being created
-    watch "oc get namespaces | grep burner-cluster-density | wc -l"
-    
-    # See all objects in one namespace
-    oc get all -n burner-cluster-density-0
+You will see each namespace fill up with: 1 Deployment, 1 Service, 2 ConfigMaps, 1 Secret.
 
-
-You will see each namespace fill up with: 1 Deployment, 1 Service, 2
-ConfigMaps, 1 Secret.
-
---------------------------------------------------------------------------------
-
+---
 
 Step 7 — Stream logs and read results
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-
-    oc logs -f job/kb-cluster-density -n burner-cluster-density
-
+`bash
+oc logs -f job/kb-cluster-density -n burner-cluster-density
+`
 
 Expected output at the end:
 
-
-    time="..." level=info msg="Triggering job: cluster-density"
-    time="..." level=info msg="Iteration 1: burner-cluster-density-0 created"
-    time="..." level=info msg="Iteration 2: burner-cluster-density-1 created"
-    ...
-    time="..." level=info msg="cluster-density: Ready 99th: 4500ms"
-    time="..." level=info msg="Finished execution. UUID: cluster-density-001"
-
+`
+time="..." level=info msg="Triggering job: cluster-density"
+time="..." level=info msg="Iteration 1: burner-cluster-density-0 created"
+time="..." level=info msg="Iteration 2: burner-cluster-density-1 created"
+...
+time="..." level=info msg="cluster-density: Ready 99th: 4500ms"
+time="..." level=info msg="Finished execution. UUID: cluster-density-001"
+`
 
 Good results:
-  * Ready 99th under 10 seconds for a healthy multi-node cluster
+- Ready 99th under 10 seconds for a healthy multi-node cluster
 
---------------------------------------------------------------------------------
-
+---
 
 Step 8 — Count what was created
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+`bash
+echo "=== Namespaces created ==="
+oc get namespaces | grep burner-cluster-density | wc -l
 
+echo "=== Total pods ==="
+oc get pods -A | grep burner-cluster-density | wc -l
 
-    echo "=== Namespaces created ==="
-    oc get namespaces | grep burner-cluster-density | wc -l
-    
-    echo "=== Total pods ==="
-    oc get pods -A | grep burner-cluster-density | wc -l
-    
-    echo "=== Total services ==="
-    oc get services -A | grep burner-cluster-density | wc -l
+echo "=== Total services ==="
+oc get services -A | grep burner-cluster-density | wc -l
+`
 
-
---------------------------------------------------------------------------------
-
+---
 
 Step 9 — Clean up
-~~~~~~~~~~~~~~~~~
 
+`bash
+oc delete job kb-cluster-density -n burner-cluster-density
+kube-burner's gc:true will delete the test namespaces automatically
+But you can force cleanup:
+oc get namespaces | grep burner-cluster-density | awk '{print $1}' | xargs oc delete namespace
+`
 
+---
 
-    oc delete job kb-cluster-density -n burner-cluster-density
-    # kube-burner's gc:true will delete the test namespaces automatically
-    # But you can force cleanup:
-    oc get namespaces | grep burner-cluster-density | awk '{print $1}' | xargs oc delete namespace
+Troubleshooting
 
+| Problem | Fix |
+|---|---|
+| etcd timeout errors | Cluster etcd is under stress; reduce qps and burst to 5 |
+| Some namespaces never get their pods | Check API server logs for rate limiting |
+| Test takes much longer than 15 min | Reduce jobIterations from 5 to 2 |
+| Secrets creation fails | Check RBAC grants access to secrets resource |
 
---------------------------------------------------------------------------------
+---
 
+Try it yourself — challenge 🏆
 
---------------------------------------------------------------------------------
-  TROUBLESHOOTING
---------------------------------------------------------------------------------
+1. Increase jobIterations to 20 — build 20 neighbourhoods! Watch the cluster work.
+2. After the test, run oc top nodes — which node used the most CPU?
+3. Try running a second test while the first is still running — what happens?
 
+---
 
-
-  +--------------------------------------+---------------------------------------------------------+
-  | Problem                              | Fix                                                     |
-  +--------------------------------------+---------------------------------------------------------+
-  | etcd timeout errors                  | Cluster etcd is under stress; reduce qps and burst to 5 |
-  | Some namespaces never get their pods | Check API server logs for rate limiting                 |
-  | Test takes much longer than 15 min   | Reduce jobIterations from 5 to 2                        |
-  | Secrets creation fails               | Check RBAC grants access to secrets resource            |
-  +--------------------------------------+---------------------------------------------------------+
-
-
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-  TRY IT YOURSELF — CHALLENGE 🏆
---------------------------------------------------------------------------------
-
-
-  1. Increase jobIterations to 20 — build 20 neighbourhoods! Watch the cluster work.
-  2. After the test, run oc top nodes — which node used the most CPU?
-  3. Try running a second test while the first is still running — what happens?
-
---------------------------------------------------------------------------------
-
-Next test: 04 — Cluster Density v2 — an even bigger and more realistic city
-
-================================================================================
-  END OF DOCUMENT — 03-cluster-density
-  Reference: docs/tests/markdown/03-cluster-density.md
-================================================================================
+Next test: 04 — Cluster Density v2 (04-cluster-density-v2.md) — an even bigger and more realistic city
