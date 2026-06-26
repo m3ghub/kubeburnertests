@@ -11,7 +11,7 @@ th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-lef
 <blockquote><strong>Time to run:</strong> 30–60 minutes  </blockquote>
 <blockquote><strong>What it does:</strong> Runs 3 escalating rounds of VM churn using real RHEL9 virtual machines cloned from the OpenShift golden image — proving the cluster handles continuous create/delete cycles with full OS boot sequences under sustained pressure  </blockquote>
 <blockquote><strong>Requires:</strong> OpenShift Virtualization (KubeVirt) installed, RHEL9 DataSource ready  </blockquote>
-<blockquote><strong>Binary:</strong> <code>kube-burner</code> v2.6.1 — runs as an in-cluster Job, nothing to install locally</blockquote>
+<blockquote><strong>Binary:</strong> <code>kube-burner</code> v2.7.3 — runs as an in-cluster Job, nothing to install locally</blockquote>
 <p></p>
 <blockquote><strong>⚡ Run Test 15 first:</strong> This test builds on Test 15. Complete Test 15 successfully before running 15B.</blockquote>
 <p></p>
@@ -648,14 +648,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

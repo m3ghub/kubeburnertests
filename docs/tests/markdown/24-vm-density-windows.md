@@ -66,7 +66,7 @@ YOU                         CLUSTER
  │  oc apply -f job.yaml
  ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.6.1)    │
+│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.7.3)    │
 │                                                              │
 │  Creates N Windows Server 2022 VMs (running: true)          │
 │                                                              │
@@ -123,7 +123,7 @@ Run all checks before starting. Every check must pass.
 oc delete pod kb-preflight -n default 2>/dev/null || true
 oc run kb-preflight \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version
 ```
@@ -132,7 +132,7 @@ Run every 15 seconds until `Completed`:
 
 ```bash
 oc get pod kb-preflight -n default
-oc logs kb-preflight -n default | grep -i version   # Expected: Version: v2.6.1
+oc logs kb-preflight -n default | grep -i version   # Expected: Version: v2.7.3
 oc delete pod kb-preflight -n default 2>/dev/null || true
 ```
 
@@ -406,14 +406,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

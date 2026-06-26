@@ -172,7 +172,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /tmp
           command:
             - kube-burner

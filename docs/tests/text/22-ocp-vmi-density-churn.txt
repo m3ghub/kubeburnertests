@@ -4,7 +4,7 @@ Test 22: OCP VMI Density + Churn — The Ultimate Soak Test
 > Time to run: 30–60 minutes (configurable)  
 > What it does: Brings up N VMs, then continuously deletes and recreates a percentage of them in cycles — the closest thing to a real production day on an OpenShift Virtualization cluster  
 > Requires: OpenShift Virtualization 4.x, multi-node cluster  
-> Binary: kube-burner v2.6.1 — runs as an in-cluster Job, nothing to install locally
+> Binary: kube-burner v2.7.3 — runs as an in-cluster Job, nothing to install locally
 
 > ⚡ Pre-flight required: Before running this test, verify kube-burner is pullable on your cluster and your environment is ready — see 00-preflight.md (00-preflight.md).
 
@@ -385,14 +385,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:
@@ -861,14 +861,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

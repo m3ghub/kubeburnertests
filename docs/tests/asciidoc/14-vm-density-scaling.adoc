@@ -477,14 +477,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=$UUID]
           volumeMounts:
@@ -522,7 +522,7 @@ VM Count | All Running? | P99 Boot Time | Notes
 80       | Timeout?     | N/A           | Ceiling found
 ----
 
-NOTE: Live run results on this cluster (kube-burner v2.6.1, CirrOS): 2 VMs = 12s P99, 5 VMs = 19s P99. Faster than the original estimates — pre-loading images to all nodes before the run accounts for most of the improvement.
+NOTE: Live run results on this cluster (kube-burner v2.7.3, CirrOS): 2 VMs = 12s P99, 5 VMs = 19s P99. Faster than the original estimates — pre-loading images to all nodes before the run accounts for most of the improvement.
 
 When a run times out (VMs never reach `Running` within 15 minutes) — that is your ceiling. The previous run's VM count is your reliable maximum.
 
@@ -962,14 +962,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=auto-escalation-001]  # change uuid for re-runs
           volumeMounts:
@@ -1063,14 +1063,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

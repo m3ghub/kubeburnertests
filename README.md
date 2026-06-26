@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![kube-burner](https://img.shields.io/badge/kube--burner-v2.6.1-EE0000?style=for-the-badge&logo=kubernetes&logoColor=white)](https://github.com/kube-burner/kube-burner)
+[![kube-burner](https://img.shields.io/badge/kube--burner-v2.7.3-EE0000?style=for-the-badge&logo=kubernetes&logoColor=white)](https://github.com/kube-burner/kube-burner)
 [![OpenShift](https://img.shields.io/badge/OpenShift-4.12+-EE0000?style=for-the-badge&logo=redhat&logoColor=white)](https://www.openshift.com)
 [![Tests](https://img.shields.io/badge/Tests-25-blue?style=for-the-badge&logo=checkmarx&logoColor=white)](#individual-test-guides)
 [![Virtualization](https://img.shields.io/badge/OpenShift%20Virtualization-KubeVirt-orange?style=for-the-badge&logo=linux&logoColor=white)](https://www.redhat.com/en/technologies/cloud-computing/openshift/virtualization)
@@ -107,7 +107,7 @@ kubectl delete pod pull-test -n default 2>/dev/null || true
 # Step B: create the test pod (note: -n default goes BEFORE the -- separator)
 kubectl run pull-test \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version
 ```
@@ -126,7 +126,7 @@ kubectl logs pull-test -n default | grep -i version
 
 **Good output:**
 ```
-Version: v2.6.1
+Version: v2.7.3
 ```
 
 **If you see `ImagePullBackOff` or `ErrImagePull`:**
@@ -167,7 +167,7 @@ Expected: a row showing `PHASE: Deployed`. If empty — VM tests (09, 13–17, 2
 |---|---|---|
 | `oc whoami` | Your username | `Unauthorized` — log in first |
 | `oc get nodes` | Each node `Ready` | Empty — cluster unreachable |
-| `kubectl logs pull-test -n default \| grep -i version` | `Version: v2.6.1` | See image pull troubleshooting above |
+| `kubectl logs pull-test -n default \| grep -i version` | `Version: v2.7.3` | See image pull troubleshooting above |
 | `oc get hyperconverged` | `PHASE: Deployed` | Empty — VM tests unavailable |
 
 ---

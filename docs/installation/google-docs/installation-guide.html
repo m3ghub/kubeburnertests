@@ -117,7 +117,7 @@
 
   <h1>Kube-Burner Installation Guide</h1>
   <div class="doc-meta">
-    <strong>Product:</strong> Kube-Burner v2.6.1 &nbsp;|&nbsp;
+    <strong>Product:</strong> Kube-Burner v2.7.3 &nbsp;|&nbsp;
     <strong>Platforms:</strong> macOS &middot; Linux &middot; OpenShift 4.x &middot; Kubernetes 1.29+ &nbsp;|&nbsp;
     <strong>Last validated:</strong> April 2026 &mdash; tested live on OCP 4.18.20 and OCP 4.21.8
   </div>
@@ -246,7 +246,7 @@ oc get clusterrolebinding kube-burner 2>&amp;1</pre>
     <tbody>
       <tr><td>OpenShift CLI (<code>oc</code>)</td><td>4.12+</td><td><code>oc version</code></td></tr>
       <tr><td>Cluster admin access</td><td>&mdash;</td><td><code>oc whoami</code></td></tr>
-      <tr><td><code>quay.io</code> reachable from cluster</td><td>&mdash;</td><td><code>oc run test --image=quay.io/kube-burner/kube-burner:v2.6.1 --restart=Never --command -- kube-burner version</code></td></tr>
+      <tr><td><code>quay.io</code> reachable from cluster</td><td>&mdash;</td><td><code>oc run test --image=quay.io/kube-burner/kube-burner:v2.7.3 --restart=Never --command -- kube-burner version</code></td></tr>
       <tr><td>OpenShift Virtualization (virt tests only)</td><td>&mdash;</td><td><code>oc get hyperconverged -A</code> &mdash; expected output:<br><pre>NAMESPACE       NAME                      AGE
 openshift-cnv   kubevirt-hyperconverged   73m</pre></td></tr>
     </tbody>
@@ -275,7 +275,7 @@ source ~/.zshrc</pre>
   curl -Ls https://raw.githubusercontent.com/kube-burner/kube-burner/refs/heads/main/hack/install.sh | sh</pre>
 
   <h4>Manual Download (optional)</h4>
-  <pre>VERSION=v2.6.1
+  <pre>VERSION=v2.7.3
 curl -LO "https://github.com/kube-burner/kube-burner/releases/download/${VERSION}/kube-burner-${VERSION}-linux-x86_64.tar.gz"
 tar -xzf kube-burner-*.tar.gz
 chmod +x kube-burner
@@ -284,7 +284,7 @@ mv kube-burner ~/.local/bin/</pre>
   <h3>3.3 Verify the Installation</h3>
   <pre>kube-burner version</pre>
   <p>Expected output:</p>
-  <pre>Version: v2.6.1
+  <pre>Version: v2.7.3
 Git commit: 197bd3367ee5bdc6584c21f77c522888b2ad65ac
 Build date: 2025-03-01T12:00:00Z
 Go version: go1.22.0</pre>
@@ -302,7 +302,7 @@ time="..." level=info msg="Cluster is healthy."</pre>
 
   <p>
     This method runs kube-burner as a Kubernetes <code>Job</code> inside the target cluster
-    using the official container image at <code>quay.io/kube-burner/kube-burner:v2.6.1</code>.
+    using the official container image at <code>quay.io/kube-burner/kube-burner:v2.7.3</code>.
   </p>
 
   <p><strong>Why in-cluster?</strong></p>
@@ -403,14 +403,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - { name: config-src, mountPath: /config-src }
             - { name: workdir,    mountPath: /config }
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command:
             - kube-burner
@@ -436,7 +436,7 @@ oc get pods -n burner-test -w</pre>
   <p><strong>Stream logs in real time:</strong></p>
   <pre>oc logs -f job/kube-burner-pod-density -n burner-test</pre>
   <p>A successful run produces output similar to:</p>
-  <pre>time="2026-04-23 14:03:28" level=info  msg="Starting kube-burner (v2.6.1) with UUID my-benchmark-001"
+  <pre>time="2026-04-23 14:03:28" level=info  msg="Starting kube-burner (v2.7.3) with UUID my-benchmark-001"
 time="2026-04-23 14:03:39" level=info  msg="Pre-load: All images pulled on 3 nodes"
 time="2026-04-23 14:03:52" level=info  msg="Triggering job: pod-density"
 time="2026-04-23 14:03:56" level=info  msg="pod-density: Ready 99th: 2000 ms   max: 2000 ms"

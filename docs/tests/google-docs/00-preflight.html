@@ -14,7 +14,7 @@ th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-lef
 <p></p>
 <h2>Check 1 — kube-burner image is pullable ⚡ (required for ALL tests)</h2>
 <p></p>
-<p>Every test in this project runs <code>quay.io/kube-burner/kube-burner:v2.6.1</code> as an in-cluster Job. If the cluster cannot pull this image, nothing works.</p>
+<p>Every test in this project runs <code>quay.io/kube-burner/kube-burner:v2.7.3</code> as an in-cluster Job. If the cluster cannot pull this image, nothing works.</p>
 <p></p>
 <p><strong>Step A — clean up any leftover pod:</strong></p>
 <p></p>
@@ -24,7 +24,7 @@ th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-lef
 <p></p>
 <pre><code>oc run kb-preflight \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version</code></pre>
 <p></p>
@@ -37,14 +37,14 @@ th{background:#f2f2f2}blockquote{border-left:4px solid #ccc;margin:0;padding-lef
 <p><strong>Step D — read the result:</strong></p>
 <p></p>
 <pre><code>oc logs kb-preflight -n default | grep -i version
-# Expected output: Version: v2.6.1</code></pre>
+# Expected output: Version: v2.7.3</code></pre>
 <p></p>
 <p><strong>Step E — clean up:</strong></p>
 <p></p>
 <pre><code>oc delete pod kb-preflight -n default 2&gt;/dev/null || true</code></pre>
 <p></p>
 <tr><td>STATUS</td><td>Meaning</td><td>Action</td></tr>
-<tr><td><code>Completed</code> + <code>Version: v2.6.1</code> in logs</td><td>✅ All tests can run</td><td>Proceed</td></tr>
+<tr><td><code>Completed</code> + <code>Version: v2.7.3</code> in logs</td><td>✅ All tests can run</td><td>Proceed</td></tr>
 <tr><td><code>ImagePullBackOff</code></td><td>quay.io/kube-burner is blocked</td><td>Run <code>oc describe pod kb-preflight -n default \</td><td>grep -A 10 "Events:"</code> for exact reason</td></tr>
 <tr><td><code>Pending</code> / <code>ContainerCreating</code> > 5 min</td><td>Network very slow or blocked</td><td>Wait another 2 min, then check Events</td></tr>
 <tr><td><code>ErrImagePull</code> then retries</td><td>Temporary network issue</td><td>Wait 60 s and recheck</td></tr>

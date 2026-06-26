@@ -47,7 +47,7 @@ Uses the `kube-burner` binary with YAML config files. Works on any Kubernetes or
 
 ## Track 2 — OCP-optimized tests (tests 18–22)
 
-Uses standard `kube-burner` v2.6.1 configured with OpenShift-optimized workloads. All tests run as in-cluster Jobs — no separate binary needed.
+Uses standard `kube-burner` v2.7.3 configured with OpenShift-optimized workloads. All tests run as in-cluster Jobs — no separate binary needed.
 Tests 20 and 22 require OpenShift Virtualization.
 
 | # | Test | Difficulty | Time | What it does |

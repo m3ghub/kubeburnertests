@@ -243,14 +243,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=churn-001]
           volumeMounts:
@@ -336,7 +336,7 @@ oc delete project burner-churn
 
 | Problem | Fix |
 |---|---|
-| `field enable not found in type config.rawChurn` (or `type`, `period`) | Remove those fields — only `duration` and `percent` are valid in `churnConfig` for v2.6.1 |
+| `field enable not found in type config.rawChurn` (or `type`, `period`) | Remove those fields — only `duration` and `percent` are valid in `churnConfig` for v2.7.3 |
 | Pods never come back after deletion | Check scheduler logs; node may be full |
 | `Too many pods` on SNO | Reduce `replicas` to 10, `percent` to 10 |
 | Latency grows each cycle | Cluster has a memory leak or garbage collection issue |

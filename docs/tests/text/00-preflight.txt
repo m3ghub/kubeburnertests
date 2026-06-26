@@ -7,7 +7,7 @@ Pre-flight Checks — Run Once Before Any Test
 
 Check 1 — kube-burner image is pullable ⚡ (required for ALL tests)
 
-Every test in this project runs quay.io/kube-burner/kube-burner:v2.6.1 as an in-cluster Job. If the cluster cannot pull this image, nothing works.
+Every test in this project runs quay.io/kube-burner/kube-burner:v2.7.3 as an in-cluster Job. If the cluster cannot pull this image, nothing works.
 
 Step A — clean up any leftover pod:
 
@@ -20,7 +20,7 @@ Step B — create the pull-test pod:
 `bash
 oc run kb-preflight \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version
 `
@@ -37,7 +37,7 @@ Step D — read the result:
 
 `bash
 oc logs kb-preflight -n default | grep -i version
-Expected output: Version: v2.6.1
+Expected output: Version: v2.7.3
 `
 
 Step E — clean up:
@@ -48,7 +48,7 @@ oc delete pod kb-preflight -n default 2>/dev/null || true
 
 | STATUS | Meaning | Action |
 |---|---|---|
-| Completed + Version: v2.6.1 in logs | ✅ All tests can run | Proceed |
+| Completed + Version: v2.7.3 in logs | ✅ All tests can run | Proceed |
 | ImagePullBackOff | quay.io/kube-burner is blocked | Run oc describe pod kb-preflight -n default \| grep -A 10 "Events:" for exact reason |
 | Pending / ContainerCreating > 5 min | Network very slow or blocked | Wait another 2 min, then check Events |
 | ErrImagePull then retries | Temporary network issue | Wait 60 s and recheck |

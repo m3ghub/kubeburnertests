@@ -190,7 +190,7 @@ The churn workload was validated on this cluster. Here is the complete observed 
 ```
 13:56:19  Local indexer created
 13:56:19  Prometheus client initialized (live Prometheus connection confirmed)
-13:56:19  kube-burner v2.6.1 started, UUID: c3-churn-001
+13:56:19  kube-burner v2.7.3 started, UUID: c3-churn-001
 13:56:25  Pre-load DaemonSet created for pause:3.9 on 1 node
 13:56:30  Image pulled on 1 SNO node                          (+5s, cached)
 13:56:37  Cleaning up previous runs
@@ -235,11 +235,11 @@ This SNO runs OCP 4.21.8 (Kubernetes v1.34.5), compared to 4.18.20 (v1.31.10) on
 | Kubernetes | v1.31.10 | v1.34.5 |
 | RHCOS | 418.94.x (9.4 kernel) | 9.6.20260324-0 (Plow, 9.6 kernel) |
 | CRI-O | 1.31.10 | 1.34.6 |
-| kube-burner behavior | Same | Same (v2.6.1 compatible) |
+| kube-burner behavior | Same | Same (v2.7.3 compatible) |
 | RBAC requirements | Same | Same |
 | Namespace naming | `kube-` forbidden | `kube-` forbidden |
 
-kube-burner v2.6.1 is fully compatible with both versions — no configuration changes needed.
+kube-burner v2.7.3 is fully compatible with both versions — no configuration changes needed.
 
 ---
 

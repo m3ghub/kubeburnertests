@@ -32,7 +32,7 @@ YOU                         CLUSTER
  │  oc apply -f job.yaml
  ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.6.1)    │
+│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.7.3)    │
 │                                                              │
 │  Creates N RHEL 9 VMs (running: true)                        │
 │  Each VM clones the RHEL 9 golden image via DataVolume       │
@@ -114,7 +114,7 @@ oc delete pod kb-preflight -n default 2>/dev/null || true
 Create the test pod
 oc run kb-preflight \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version
 `
@@ -129,7 +129,7 @@ Then read the output:
 
 `bash
 oc logs kb-preflight -n default | grep -i version
-Expected: Version: v2.6.1
+Expected: Version: v2.7.3
 `
 
 Clean up:
@@ -588,14 +588,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

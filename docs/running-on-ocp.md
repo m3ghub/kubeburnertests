@@ -28,7 +28,7 @@ This guide was tested on:
 | Kubernetes | v1.31.10 |
 | CRI-O | 1.31.10 |
 | RHCOS | 418.94.202507091512-0 |
-| kube-burner | v2.6.1 |
+| kube-burner | v2.7.3 |
 
 **Cluster topology:**
 - 3 control plane nodes (15.5 vCPU, ~30 GiB RAM each)

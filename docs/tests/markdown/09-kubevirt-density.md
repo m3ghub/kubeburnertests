@@ -425,14 +425,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=kubevirt-001]
           volumeMounts:
@@ -494,7 +494,7 @@ oc logs -f job/kb-kubevirt -n burner-kubevirt
 You will see kube-burner report each phase as it completes. Actual output from a live run:
 
 ```
-time="..." level=info msg="🔥 Starting kube-burner (v2.6.1) with UUID kubevirt-001"
+time="..." level=info msg="🔥 Starting kube-burner (v2.7.3) with UUID kubevirt-001"
 time="..." level=info msg="Pre-load: Creating DaemonSet using images [quay.io/kubevirt/cirros-registry-disk-demo:latest]"
 time="..." level=info msg="Pre-load: All images pulled on 3 nodes"
 time="..." level=info msg="Triggering job: kubevirt-density"
@@ -511,7 +511,7 @@ time="..." level=info msg="Finished execution with UUID: kubevirt-001"
 time="..." level=info msg="👋 Exiting kube-burner kubevirt-001"
 ```
 
-> **Pre-load note:** kube-burner v2.6.1 automatically creates a temporary DaemonSet to pre-pull the container image to all nodes before starting the test. This adds ~15 seconds but ensures consistent boot times across nodes. It is removed automatically.
+> **Pre-load note:** kube-burner v2.7.3 automatically creates a temporary DaemonSet to pre-pull the container image to all nodes before starting the test. This adds ~15 seconds but ensures consistent boot times across nodes. It is removed automatically.
 
 **Typical CirrOS VM boot time (VMIRunning P99): 15–20 seconds** on a healthy cluster.  
 If your VMs take longer than 60 seconds, check node resources (Tab 3 and 4).

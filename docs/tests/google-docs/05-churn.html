@@ -228,14 +228,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=churn-001]
           volumeMounts:
@@ -308,7 +308,7 @@ oc delete project burner-churn</code></pre>
 <h2>Troubleshooting</h2>
 <p></p>
 <tr><td>Problem</td><td>Fix</td></tr>
-<tr><td><code>field enable not found in type config.rawChurn</code> (or <code>type</code>, <code>period</code>)</td><td>Remove those fields — only <code>duration</code> and <code>percent</code> are valid in <code>churnConfig</code> for v2.6.1</td></tr>
+<tr><td><code>field enable not found in type config.rawChurn</code> (or <code>type</code>, <code>period</code>)</td><td>Remove those fields — only <code>duration</code> and <code>percent</code> are valid in <code>churnConfig</code> for v2.7.3</td></tr>
 <tr><td>Pods never come back after deletion</td><td>Check scheduler logs; node may be full</td></tr>
 <tr><td><code>Too many pods</code> on SNO</td><td>Reduce <code>replicas</code> to 10, <code>percent</code> to 10</td></tr>
 <tr><td>Latency grows each cycle</td><td>Cluster has a memory leak or garbage collection issue</td></tr>

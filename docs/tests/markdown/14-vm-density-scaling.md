@@ -457,14 +457,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=$UUID]
           volumeMounts:
@@ -484,7 +484,7 @@ Once the Job is running, stream the live output:
 oc logs -f job/kb-density-scale -n burner-density-scale
 ```
 
-> **What you will see first:** kube-burner v2.6.1 automatically pre-pulls the container image to all nodes via a temporary DaemonSet before starting the VMs. This appears as `Pre-load: All images pulled on N nodes` and adds ~15 seconds but ensures consistent, fast boot times. It is cleaned up automatically.
+> **What you will see first:** kube-burner v2.7.3 automatically pre-pulls the container image to all nodes via a temporary DaemonSet before starting the VMs. This appears as `Pre-load: All images pulled on N nodes` and adds ~15 seconds but ensures consistent, fast boot times. It is cleaned up automatically.
 
 > **`spec.running is deprecated` warnings** in the logs are harmless — they come from using `runStrategy: Always` being the modern field name. VM behaviour is identical.
 
@@ -505,7 +505,7 @@ VM Count | All Running? | P99 Boot Time | Notes
 80       | Timeout?     | N/A           | Ceiling found
 ```
 
-> **Live run results (this cluster, kube-burner v2.6.1, CirrOS):**
+> **Live run results (this cluster, kube-burner v2.7.3, CirrOS):**
 > - 2 VMs: VMIRunning P99 = 12s, VMReady P99 = 12s
 > - 5 VMs: VMIRunning P99 = 19s, VMReady P99 = 24s
 
@@ -932,14 +932,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=auto-escalation-001]  # change uuid for re-runs
           volumeMounts:
@@ -1031,14 +1031,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

@@ -177,14 +177,14 @@ EOF</code></pre>
 <p>      restartPolicy: Never</p>
 <p>      initContainers:</p>
 <p>        - name: copy-config</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.6.1</p>
+<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
 <p>          command: [sh, -c, "cp /config-src/* /config/"]</p>
 <p>          volumeMounts:</p>
 <p>            - {name: config-src, mountPath: /config-src}</p>
 <p>            - {name: workdir,    mountPath: /config}</p>
 <p>      containers:</p>
 <p>        - name: kube-burner</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.6.1</p>
+<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
 <p>          workingDir: /config</p>
 <p>          command:</p>
 <p>            - kube-burner</p>

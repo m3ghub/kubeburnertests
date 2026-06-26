@@ -33,7 +33,7 @@ and OCP 4.21.8 (SNO bare-metal cluster). All timings and log output are verbatim
 
 | Requirement | Version used |
 |---|---|
-| kube-burner | v2.6.1 |
+| kube-burner | v2.7.3 |
 | OpenShift | 4.18.20 (multi-node), 4.21.8 (SNO) |
 | oc / kubectl | any recent |
 | Prometheus (for alerting/metrics) | OCP built-in |
@@ -117,7 +117,7 @@ spec:
 **Real result — OCP 4.18.20, cluster-74ltp (3-worker VM)**
 
 ```
-time="2026-04-23 14:03:28" level=info msg="🔥 Starting kube-burner (v2.6.1) with UUID all-tests-001"
+time="2026-04-23 14:03:28" level=info msg="🔥 Starting kube-burner (v2.7.3) with UUID all-tests-001"
 time="2026-04-23 14:03:39" level=info msg="Pre-load: All images pulled on 3 nodes"
 time="2026-04-23 14:03:52" level=info msg="Triggering job: create-baseline"
 time="2026-04-23 14:03:52" level=info msg="0/3 iterations completed"
@@ -408,7 +408,7 @@ spec:
 **Real result — OCP 4.18.20, cluster-74ltp (OpenShift Virtualization installed)**
 
 ```
-time="2026-04-23 14:09:36" level=info msg="🔥 Starting kube-burner (v2.6.1) with UUID virt-test-001"
+time="2026-04-23 14:09:36" level=info msg="🔥 Starting kube-burner (v2.7.3) with UUID virt-test-001"
 time="2026-04-23 14:09:47" level=info msg="Pre-load: All images pulled on 3 nodes"
 time="2026-04-23 14:09:58" level=info msg="Triggering job: create-vm"
 I0423 14:09:58 warnings.go:110] "spec.running is deprecated, please use spec.runStrategy instead."
@@ -551,7 +551,7 @@ Deletes all namespaces and objects created by a previous `init` run. Uses the
 kube-burner destroy -c config.yml
 ```
 
-> `--uuid` is **not** a flag for `destroy` (v2.6.1). Destruction is driven purely by
+> `--uuid` is **not** a flag for `destroy` (v2.7.3). Destruction is driven purely by
 > label selectors derived from the config's job names.
 
 **Real result — OCP 4.18.20, cluster-74ltp**
@@ -588,7 +588,7 @@ time="2026-04-23 14:05:29" level=info msg="👋 Exiting kube-burner "
 > # in a Job manifest, add health-check as an initContainer
 > initContainers:
 >   - name: preflight
->     image: quay.io/kube-burner/kube-burner:v2.6.1
+>     image: quay.io/kube-burner/kube-burner:v2.7.3
 >     workingDir: /tmp
 >     command: [kube-burner, health-check]
 > ```
@@ -769,7 +769,7 @@ kube-burner version
 ```
 
 ```
-Version: v2.6.1
+Version: v2.7.3
 Git commit: 197bd3367ee5bdc6584c21f77c522888b2ad65ac
 Build date: 2025-03-01T12:00:00Z
 Go version: go1.22.0
@@ -856,7 +856,7 @@ jobs:
 **Real execution timeline — OCP 4.18.20, cluster-74ltp**
 
 ```
-14:03:28  🔥 Starting kube-burner v2.6.1
+14:03:28  🔥 Starting kube-burner v2.7.3
 14:03:39  Pre-load: All images pulled on 3 nodes           (+11s)
 14:03:52  Triggering job: create-baseline
 14:03:56  All 3 namespaces completed                       (+5s)

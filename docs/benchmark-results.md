@@ -1,6 +1,6 @@
 # Benchmark Results — Live OCP Cluster Data
 
-All results captured from live runs against real OpenShift 4.18.20 clusters using kube-burner v2.6.1.
+All results captured from live runs against real OpenShift 4.18.20 clusters using kube-burner v2.7.3.
 
 ---
 
@@ -246,7 +246,7 @@ Approximately **3–4 churn cycles** complete within the 2-minute window.
 
 1. **Prometheus integration confirmed working** — client initialized with live OCP Prometheus endpoint before network disconnection
 2. **Bare metal speed** — all 4 iterations created in < 1 second vs 3–8s on VM-based clusters 1 & 2
-3. **OCP 4.21 vs 4.18** — no configuration changes needed between versions; kube-burner v2.6.1 is fully compatible
+3. **OCP 4.21 vs 4.18** — no configuration changes needed between versions; kube-burner v2.7.3 is fully compatible
 4. **SNO pod limit is a hard constraint** — must be checked before every run; available slots vary with operator load
 
 ---

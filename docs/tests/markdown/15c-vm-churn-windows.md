@@ -4,7 +4,7 @@
 > **Time to run:** 45–90 minutes  
 > **What it does:** Runs 3 escalating rounds of VM churn using real Windows Server 2022 virtual machines cloned from the OpenShift golden image — the most demanding churn test due to Windows boot times and disk size  
 > **Requires:** OpenShift Virtualization (KubeVirt) installed, Windows Server 2022 DataSource ready (`windows2k22`)  
-> **Binary:** `kube-burner` v2.6.1 — runs as an in-cluster Job, nothing to install locally
+> **Binary:** `kube-burner` v2.7.3 — runs as an in-cluster Job, nothing to install locally
 
 > **⚡ Run Test 15 first:** This test builds on Test 15. Complete Test 15 successfully before running 15C.
 
@@ -684,14 +684,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:

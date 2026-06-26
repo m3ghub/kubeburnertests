@@ -1,6 +1,6 @@
 # Kube-Burner Installation Guide
 
-**Version:** kube-burner v2.6.1  
+**Version:** kube-burner v2.7.3  
 **Tested on:** OpenShift 4.18 and 4.21  
 **Last validated:** April 2026 — live-tested on `cluster-74ltp.dynamic.redhatworkshops.io`
 
@@ -11,7 +11,7 @@
 > **You do not need to install anything on your laptop.**
 >
 > Every test in this project runs kube-burner as an in-cluster Kubernetes Job using
-> the official container image `quay.io/kube-burner/kube-burner:v2.6.1`.
+> the official container image `quay.io/kube-burner/kube-burner:v2.7.3`.
 >
 > All you need is:
 > - Access to an OpenShift web console
@@ -93,7 +93,7 @@ oc delete pod pull-test -n default 2>/dev/null || true
 # Step 2: create the pod (-n default goes BEFORE the -- separator)
 oc run pull-test \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version
 ```
@@ -116,7 +116,7 @@ Expected output when complete:
 ```bash
 # Step 4: once Completed, read the result
 oc logs pull-test -n default | grep -i version
-# Good output: Version: v2.6.1
+# Good output: Version: v2.7.3
 ```
 
 ```bash
@@ -132,7 +132,7 @@ oc delete pod pull-test -n default 2>/dev/null || true
 | Pod status | Meaning | Action |
 |---|---|---|
 | `Pending` / `ContainerCreating` | Image is downloading | Wait — first pull takes 1–3 min |
-| `Completed` | Success — tests will work | Run Step 4 to see `Version: v2.6.1` |
+| `Completed` | Success — tests will work | Run Step 4 to see `Version: v2.7.3` |
 | `ImagePullBackOff` | quay.io blocked or auth required | Run Step 5 to see exact error |
 | `ErrImagePull` then retries | Temporary network issue | Wait 60s and recheck |
 
@@ -179,14 +179,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=<your-uuid>]
           volumeMounts:
@@ -291,7 +291,7 @@ kube-burner version
 #### Manual download (any platform)
 
 ```bash
-VERSION=v2.6.1
+VERSION=v2.7.3
 curl -LO "https://github.com/kube-burner/kube-burner/releases/download/${VERSION}/kube-burner-${VERSION}-linux-x86_64.tar.gz"
 tar -xzf kube-burner-*.tar.gz
 chmod +x kube-burner
@@ -303,7 +303,7 @@ kube-burner version
 
 ```bash
 kube-burner version
-# Expected: Version: v2.6.1
+# Expected: Version: v2.7.3
 
 kube-burner health-check
 # Expected: Cluster is healthy.
@@ -450,7 +450,7 @@ which kube-burner
 | Problem | Cause | Fix |
 |---|---|---|
 | `serviceaccount "kube-burner" not found` | SA not created, or created in wrong namespace | Run `oc create serviceaccount kube-burner -n <namespace>` |
-| `Error: ErrImagePull` on `kube-burner:v2.6.1` | `quay.io` blocked from cluster | Check pull secrets: `oc get secret pull-secret -n openshift-config` |
+| `Error: ErrImagePull` on `kube-burner:v2.7.3` | `quay.io` blocked from cluster | Check pull secrets: `oc get secret pull-secret -n openshift-config` |
 | `the body of the request was in an unknown format` | `gc: true` patching VMs | Set `gc: false` and add a `jobType: delete` job |
 | Namespace shows as `burner-kubevirt-0` instead of `burner-kubevirt` | Missing `namespacedIterations: false` | Add `namespacedIterations: false` to the create job |
 | `cannot request a project starting with "kube-"` | OCP reserved prefix | Rename namespace — use `burner-`, `perf-`, or `bench-` |

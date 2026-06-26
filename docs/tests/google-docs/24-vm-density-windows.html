@@ -68,7 +68,7 @@ oc get datasource -n openshift-virtualization-os-images | grep win</code></pre>
  │  oc apply -f job.yaml
  ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.6.1)    │
+│  kube-burner Job (quay.io/kube-burner/kube-burner:v2.7.3)    │
 │                                                              │
 │  Creates N Windows Server 2022 VMs (running: true)          │
 │                                                              │
@@ -121,14 +121,14 @@ oc get datasource -n openshift-virtualization-os-images | grep win</code></pre>
 <pre><code>oc delete pod kb-preflight -n default 2&gt;/dev/null || true
 oc run kb-preflight \
   -n default \
-  --image=quay.io/kube-burner/kube-burner:v2.6.1 \
+  --image=quay.io/kube-burner/kube-burner:v2.7.3 \
   --restart=Never \
   --command -- kube-burner version</code></pre>
 <p></p>
 <p>Run every 15 seconds until <code>Completed</code>:</p>
 <p></p>
 <pre><code>oc get pod kb-preflight -n default
-oc logs kb-preflight -n default | grep -i version   # Expected: Version: v2.6.1
+oc logs kb-preflight -n default | grep -i version   # Expected: Version: v2.7.3
 oc delete pod kb-preflight -n default 2&gt;/dev/null || true</code></pre>
 <p></p>
 <p>If <code>ImagePullBackOff</code> — quay.io is blocked on this cluster. No tests can run until resolved.</p>
@@ -377,14 +377,14 @@ spec:
       restartPolicy: Never
       initContainers:
         - name: copy-config
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           command: [sh, -c, "cp /config-src/* /config/"]
           volumeMounts:
             - {name: config-src, mountPath: /config-src}
             - {name: workdir,    mountPath: /config}
       containers:
         - name: kube-burner
-          image: quay.io/kube-burner/kube-burner:v2.6.1
+          image: quay.io/kube-burner/kube-burner:v2.7.3
           workingDir: /config
           command: [kube-burner, init, -c, /config/config.yml, --uuid=${UUID}]
           volumeMounts:
