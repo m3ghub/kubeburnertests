@@ -1,10 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Test 09b: RHEL 9 KubeVirt Density — Real OS Virtual Machine Lifecycle</title>
-<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px}
-pre{background:#f4f4f4;padding:15px;border-radius:4px;overflow-x:auto}
-code{background:#f4f4f4;padding:2px 5px;border-radius:3px}
-blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
-table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}</style>
-</head><body>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Test 09b: RHEL 9 KubeVirt Density — Real OS Virtual Machine Lifecycle</title><style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px}pre{background:#f4f4f4;padding:15px;border-radius:4px;overflow-x:auto}code{background:#f4f4f4;padding:2px 5px;border-radius:3px}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}</style></head><body>
 <h1>Test 09b: RHEL 9 KubeVirt Density — Real OS Virtual Machine Lifecycle</h1>
 
 <blockquote><strong>Difficulty:</strong> ⭐⭐⭐ Advanced  </blockquote>
@@ -189,98 +183,96 @@ EOF
 
 <h3>Step 7 — Create the config files</h3>
 
-<p><strong>File 1 — RHEL 9 VM template</strong></p>
+<p><strong>Option A — Download from repo (recommended):</strong></p>
 
-<pre><code><strong>Option A — Download from repo (recommended):</strong>
-
-<p></code></pre>bash<br>
-BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/09b-rhel-density"</p>
+<pre><code>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/09b-rhel-density"
 
 <p>curl --fail -sL "${BASE}/rhel-density-vm.yml" -o /tmp/rhel-density-vm.yml<br>
 curl --fail -sL "${BASE}/rhel-density-config.yml" -o /tmp/rhel-density-config.yml<br>
-<pre><code><br>
-Verify:</p>
-
-<p></code></pre>bash<br>
-head -2 /tmp/rhel-density-vm.yml   # must start with: apiVersion: kubevirt.io/v1 or global:<br>
-head -2 /tmp/rhel-density-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:<br>
-<pre><code><br>
-<details><br>
-<summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary></p>
-
-<p>cat > /tmp/rhel-density-vm.yml << 'EOF'<br>
-apiVersion: kubevirt.io/v1<br>
-kind: VirtualMachine<br>
-metadata:<br>
-  name: rhel-vm-{{.Iteration}}-{{.Replica}}<br>
-  labels:<br>
-    app: kube-burner-rhel<br>
-    kube-burner-job: create-rhel-vms<br>
-spec:<br>
-  runStrategy: Always<br>
-  dataVolumeTemplates:<br>
-    - metadata:<br>
-        name: rhel-disk-{{.Iteration}}-{{.Replica}}<br>
-      spec:<br>
-        sourceRef:<br>
-          kind: DataSource<br>
-          name: rhel9<br>
-          namespace: openshift-virtualization-os-images<br>
-        storage:<br>
-          storageClassName: ""       # Leave blank to use cluster default<br>
-          accessModes:<br>
-            - ReadWriteMany          # ReadWriteMany enables live migration<br>
-          resources:<br>
-            requests:<br>
-              storage: 30Gi<br>
-  template:<br>
-    metadata:<br>
-      labels:<br>
-        app: kube-burner-rhel<br>
-        kube-burner-job: create-rhel-vms<br>
-    spec:<br>
-      domain:<br>
-        cpu:<br>
-          cores: 1<br>
-        resources:<br>
-          requests:<br>
-            memory: 2Gi<br>
-        devices:<br>
-          disks:<br>
-            - name: rootdisk<br>
-              disk:<br>
-                bus: virtio<br>
-            - name: cloudinitdisk<br>
-              disk:<br>
-                bus: virtio<br>
-          interfaces:<br>
-            - name: default<br>
-              masquerade: {}<br>
-      networks:<br>
-        - name: default<br>
-          pod: {}<br>
-      volumes:<br>
-        - name: rootdisk<br>
-          dataVolume:<br>
-            name: rhel-disk-{{.Iteration}}-{{.Replica}}<br>
-        - name: cloudinitdisk<br>
-          cloudInitNoCloud:<br>
-            userData: |<br>
-              #cloud-config<br>
-              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}<br>
-              user: cloud-user<br>
-              password: redhat123<br>
-              chpasswd:<br>
-                expire: false<br>
-              ssh_pwauth: true<br>
-EOF<br>
 </code></pre></p>
+
+<p>Verify:</p>
+
+<pre><code>head -2 /tmp/rhel-density-vm.yml      # must start with: apiVersion: kubevirt.io/v1
+head -2 /tmp/rhel-density-config.yml  # must start with: global:
+</code></pre>
+
+<details>
+<summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
+
+<p><strong>File 1 — RHEL 9 VM template:</strong></p>
+
+<pre><code>cat > /tmp/rhel-density-vm.yml << 'EOF'
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner-rhel
+    kube-burner-job: create-rhel-vms
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          storageClassName: ""       # Leave blank to use cluster default
+          accessModes:
+            - ReadWriteMany          # ReadWriteMany enables live migration
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: kube-burner-rhel
+        kube-burner-job: create-rhel-vms
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+              ssh_pwauth: true
+EOF
+</code></pre>
 
 <blockquote><strong><code>storageClassName: ""</code></strong> — leave blank to use your cluster's default storage class. To use a specific class, replace <code>""</code> with the class name from <code>oc get storageclass</code>.</blockquote>
 
-<hr>
-
-<p><strong>File 2 — Main config</strong></p>
+<p><strong>File 2 — Main config:</strong></p>
 
 <pre><code>cat > /tmp/rhel-density-config.yml << 'EOF'
 global:
@@ -328,6 +320,8 @@ EOF<br>
 
 <blockquote><strong>Why <code>maxWaitTimeout: 20m</code>?</strong> RHEL 9 takes 60–120 seconds to boot after the PVC clone completes. The clone itself takes 2–5 minutes. 20 minutes gives the full pipeline enough headroom on a healthy cluster.</blockquote>
 
+<p></details></p>
+
 <hr>
 
 <h3>Step 7b — Verify both files</h3>
@@ -341,13 +335,11 @@ EOF<br>
 
 <h3>Step 8 — Package into a ConfigMap</h3>
 
-<pre><code></details>
-
-<p>oc create configmap rhel-density-config \<br>
-  --from-file=config.yml=/tmp/rhel-density-config.yml \<br>
-  --from-file=rhel-density-vm.yml=/tmp/rhel-density-vm.yml \<br>
-  -n burner-rhel-density<br>
-</code></pre></p>
+<pre><code>oc create configmap rhel-density-config \
+  --from-file=config.yml=/tmp/rhel-density-config.yml \
+  --from-file=rhel-density-vm.yml=/tmp/rhel-density-vm.yml \
+  -n burner-rhel-density
+</code></pre>
 
 <hr>
 

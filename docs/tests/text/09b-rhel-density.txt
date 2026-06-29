@@ -192,9 +192,6 @@ Note the addition vs Test 09: The cdi.kubevirt.io apiGroup is required for DataV
 
 Step 7 — Create the config files
 
-File 1 — RHEL 9 VM template
-
-`bash
 Option A — Download from repo (recommended):
 
 `bash
@@ -207,13 +204,16 @@ curl --fail -sL "${BASE}/rhel-density-config.yml" -o /tmp/rhel-density-config.ym
 Verify:
 
 `bash
-head -2 /tmp/rhel-density-vm.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
-head -2 /tmp/rhel-density-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
+head -2 /tmp/rhel-density-vm.yml      # must start with: apiVersion: kubevirt.io/v1
+head -2 /tmp/rhel-density-config.yml  # must start with: global:
 `
 
 <details>
 <summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
 
+File 1 — RHEL 9 VM template:
+
+`bash
 cat > /tmp/rhel-density-vm.yml << 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -284,9 +284,7 @@ EOF
 
 storageClassName: "" — leave blank to use your cluster's default storage class. To use a specific class, replace "" with the class name from oc get storageclass.
 
----
-
-File 2 — Main config
+File 2 — Main config:
 
 `bash
 cat > /tmp/rhel-density-config.yml << 'EOF'
@@ -335,6 +333,8 @@ Why qps: 3 instead of 5? Each RHEL VM triggers a 30Gi PVC clone from the golden 
 
 Why maxWaitTimeout: 20m? RHEL 9 takes 60–120 seconds to boot after the PVC clone completes. The clone itself takes 2–5 minutes. 20 minutes gives the full pipeline enough headroom on a healthy cluster.
 
+</details>
+
 ---
 
 Step 7b — Verify both files
@@ -350,8 +350,6 @@ Both must show non-zero sizes before continuing.
 Step 8 — Package into a ConfigMap
 
 `bash
-</details>
-
 oc create configmap rhel-density-config \
   --from-file=config.yml=/tmp/rhel-density-config.yml \
   --from-file=rhel-density-vm.yml=/tmp/rhel-density-vm.yml \

@@ -217,31 +217,31 @@ ____
 
 === Step 7 — Create the config files
 
-_File 1 — RHEL 9 VM template_
+_Option A — Download from repo (recommended):_
 
 [source]
 ----
-_Option A — Download from repo (recommended):_
-
-----bash
 BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/09b-rhel-density"
 
 curl --fail -sL "${BASE}/rhel-density-vm.yml" -o /tmp/rhel-density-vm.yml
 curl --fail -sL "${BASE}/rhel-density-config.yml" -o /tmp/rhel-density-config.yml
-[source]
 ----
 
 Verify:
 
-----bash
-head -2 /tmp/rhel-density-vm.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
-head -2 /tmp/rhel-density-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
 [source]
+----
+head -2 /tmp/rhel-density-vm.yml      # must start with: apiVersion: kubevirt.io/v1
+head -2 /tmp/rhel-density-config.yml  # must start with: global:
 ----
 
 <details>
 <summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
 
+_File 1 — RHEL 9 VM template:_
+
+[source]
+----
 cat > /tmp/rhel-density-vm.yml << 'EOF'
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -314,9 +314,7 @@ ____
 _`storageClassName: ""`_ — leave blank to use your cluster's default storage class. To use a specific class, replace `""` with the class name from `oc get storageclass`.
 ____
 
-'''
-
-_File 2 — Main config_
+_File 2 — Main config:_
 
 [source]
 ----
@@ -370,6 +368,8 @@ ____
 _Why `maxWaitTimeout: 20m`?_ RHEL 9 takes 60–120 seconds to boot after the PVC clone completes. The clone itself takes 2–5 minutes. 20 minutes gives the full pipeline enough headroom on a healthy cluster.
 ____
 
+</details>
+
 '''
 
 === Step 7b — Verify both files
@@ -387,8 +387,6 @@ Both must show non-zero sizes before continuing.
 
 [source]
 ----
-</details>
-
 oc create configmap rhel-density-config \
   --from-file=config.yml=/tmp/rhel-density-config.yml \
   --from-file=rhel-density-vm.yml=/tmp/rhel-density-vm.yml \
