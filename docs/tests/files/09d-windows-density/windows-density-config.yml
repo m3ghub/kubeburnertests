@@ -1,0 +1,39 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # PHASE 1: CREATE — 3 Windows Server 2022 VMs, 4Gi each
+  # PVC clone from win2k22 takes 5–15 minutes per VM
+  # Windows boot after clone: 3–8 minutes
+  # Total time budget: 30–45 minutes
+  # ============================================================
+  - name: create-windows-vms
+    namespace: burner-windows-density
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 2
+    burst: 2
+    objects:
+      - objectTemplate: /config/windows-density-vm.yml
+        replicas: 3
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    jobPause: 120s
+
+  # ============================================================
+  # PHASE 2: DELETE — remove all Windows VMs and their PVCs
+  # ============================================================
+  - name: delete-windows-vms
+    namespace: burner-windows-density
+    jobType: delete
+    qps: 2
+    burst: 2
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: create-windows-vms

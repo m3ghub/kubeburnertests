@@ -1,0 +1,64 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: kube-burner-rhel
+    kube-burner-job: "{{.JobName}}"
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          storageClassName: ""
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: kube-burner-rhel
+        kube-burner-job: "{{.JobName}}"
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+              ssh_pwauth: true

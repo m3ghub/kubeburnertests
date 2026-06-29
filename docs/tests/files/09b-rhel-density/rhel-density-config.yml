@@ -1,0 +1,38 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ============================================================
+  # PHASE 1: CREATE — 3 RHEL 9 VMs, 2Gi each
+  # PVC clone from golden image takes 2–5 minutes before boot
+  # VMIRunning P99 target: < 180s on healthy cluster
+  # ============================================================
+  - name: create-rhel-vms
+    namespace: burner-rhel-density
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 3
+    burst: 3
+    objects:
+      - objectTemplate: /config/rhel-density-vm.yml
+        replicas: 3
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    jobPause: 60s
+
+  # ============================================================
+  # PHASE 2: DELETE — remove all RHEL VMs and their PVCs
+  # ============================================================
+  - name: delete-rhel-vms
+    namespace: burner-rhel-density
+    jobType: delete
+    qps: 3
+    burst: 3
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: create-rhel-vms

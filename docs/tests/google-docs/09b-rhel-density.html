@@ -1,0 +1,539 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Test 09b: RHEL 9 KubeVirt Density — Real OS Virtual Machine Lifecycle</title>
+<style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px}
+pre{background:#f4f4f4;padding:15px;border-radius:4px;overflow-x:auto}
+code{background:#f4f4f4;padding:2px 5px;border-radius:3px}
+blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}</style>
+</head><body>
+<h1>Test 09b: RHEL 9 KubeVirt Density — Real OS Virtual Machine Lifecycle</h1>
+
+<blockquote><strong>Difficulty:</strong> ⭐⭐⭐ Advanced  </blockquote>
+<blockquote><strong>Time to run:</strong> ~30 minutes  </blockquote>
+<blockquote><strong>What it does:</strong> Creates, starts, and deletes RHEL 9 Virtual Machines using OpenShift Virtualization — measures real-OS VM boot latency and lifecycle performance  </blockquote>
+<blockquote><strong>Requires:</strong> OpenShift Virtualization 4.x, <code>rhel9</code> DataSource ready in <code>openshift-virtualization-os-images</code>, storage class that supports dynamic provisioning  </blockquote>
+<blockquote><strong>Companion test:</strong> This is the RHEL 9 variant of <a href="09-kubevirt-density.md">Test 09</a>. Run Test 09 first to confirm your cluster can boot VMs, then use this test to establish your RHEL baseline.</blockquote>
+
+<blockquote><strong>⚡ Pre-flight required:</strong> Before running this test, verify kube-burner is pullable and your environment is ready — see <strong><a href="00-preflight.md">00-preflight.md</a></strong> (Checks 1–6 all apply).</blockquote>
+
+<blockquote><strong>STIG / quota-enforced clusters:</strong> If your cluster enforces a <code>ResourceQuota</code>, use the quota-safe Job variant in Step 9. Run <code>oc get resourcequota -n burner-rhel-density</code> to check. See <a href="../../concerns/CONCERN-013-stig-resource-quota.md">CONCERN-013</a>.</blockquote>
+
+<hr>
+
+<p>!<a href="../../diagrams/tests/png/09b-rhel-density.png">Diagram</a></p>
+
+<h2>What is this test? 🖥️🐧</h2>
+
+<p><a href="09-kubevirt-density.md">Test 09</a> uses CirrOS — a 5 MB toy OS that boots in 15 seconds. That is great for measuring raw scheduling speed, but it tells you nothing about real workload performance.</p>
+
+<p>This test runs the <strong>identical lifecycle</strong> (create → boot → delete, measure P99 latency) using <strong>RHEL 9</strong> — the same OS running your production applications. The difference shows you:</p>
+
+<li><strong>How long a RHEL 9 VM actually takes to boot</strong> on your cluster (60–120 seconds is normal)</li>
+<li><strong>Whether your storage can clone the golden image fast enough</strong> under load</li>
+<li><strong>Whether your cluster has the capacity</strong> to run multiple real-OS VMs simultaneously</li>
+
+<p>This is the benchmark your virtualisation team cares about — not CirrOS toy numbers, but real RHEL boot times.</p>
+
+<hr>
+
+<h2>What does it measure?</h2>
+
+<tr><td>Metric</td><td>What it means</td></tr>
+<tr><td>---</td><td>---</td></tr>
+<tr><td><strong>VMIRunning P99</strong></td><td>How long until the 99th percentile RHEL VM reached Running state</td></tr>
+<tr><td><strong>VMReady P99</strong></td><td>How long until the VM passed its readiness check</td></tr>
+<tr><td><strong>PVC clone time</strong></td><td>How fast CDI cloned the RHEL golden image per VM (visible in DataVolume events)</td></tr>
+<tr><td><strong>Storage throughput</strong></td><td>I/O pressure on the storage class during simultaneous PVC cloning</td></tr>
+
+<hr>
+
+<h2>How it works</h2>
+
+<pre><code>PVC Clone          Boot               Ready              Delete
+──────────         ──────────         ──────────         ──────────
+CDI clones         RHEL 9 VM          VM passes          All VMs and
+rhel9 golden       boots from         readiness          PVCs removed
+PVC → new 30Gi     cloned disk        check              from cluster
+PVC per VM         (60–120s)          ✅ Running          ✅ Done
+</code></pre>
+
+<hr>
+
+<h2>Before you start — open these browser tabs</h2>
+
+<tr><td>Tab</td><td>Where to go</td><td>What you will watch</td></tr>
+<tr><td>---</td><td>---</td><td>---</td></tr>
+<tr><td><strong>Tab 1</strong></td><td>Web terminal</td><td>Commands</td></tr>
+<tr><td><strong>Tab 2</strong></td><td>Virtualization → VirtualMachines</td><td>VMs appearing and changing state</td></tr>
+<tr><td><strong>Tab 3</strong></td><td>Storage → PersistentVolumeClaims</td><td>PVCs being cloned from RHEL golden image</td></tr>
+<tr><td><strong>Tab 4</strong></td><td>Observe → Dashboards → KubeVirt / Infrastructure Resources</td><td>CPU, memory, storage I/O</td></tr>
+
+<hr>
+
+<h2>Pre-flight checklist</h2>
+
+<li><input type='checkbox'> Logged into OpenShift web console</li>
+<li><input type='checkbox'> OpenShift Virtualization installed (<code>oc get hyperconverged -A</code>)</li>
+<li><input type='checkbox'> <code>rhel9</code> DataSource is <code>Ready: True</code> in <code>openshift-virtualization-os-images</code></li>
+<li><input type='checkbox'> Storage class supports dynamic provisioning and at least 90Gi free (3 VMs × 30Gi)</li>
+<li><input type='checkbox'> At least 2 worker nodes with ~6Gi free RAM (3 VMs × 2Gi)</li>
+<li><input type='checkbox'> ~30 minutes free</li>
+
+<p><strong>Verify the RHEL golden image is ready:</strong></p>
+
+<pre><code>oc get datasource rhel9 -n openshift-virtualization-os-images \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+<h1>Expected: True</h1>
+</code></pre>
+
+<p>If it returns <code>False</code> or nothing — the golden image is not imported. Ask your cluster administrator to enable the RHEL 9 golden image import via the OpenShift Virtualization operator.</p>
+
+<hr>
+
+<h2>Step-by-step guide</h2>
+
+<hr>
+
+<h3>Step 1 — Open the web terminal</h3>
+
+<p>Click the <strong><code>>_</code> icon</strong> in the top-right of the OpenShift console. Confirm you are logged in:</p>
+
+<pre><code>oc whoami
+</code></pre>
+
+<hr>
+
+<h3>Step 2 — Verify OpenShift Virtualization is installed</h3>
+
+<pre><code>oc get hyperconverged -A
+</code></pre>
+
+<p>Expected output shows <code>kubevirt-hyperconverged</code> in <code>openshift-cnv</code> namespace. If nothing returns, stop and install OpenShift Virtualization first.</p>
+
+<hr>
+
+<h3>Step 3 — Verify the RHEL 9 golden image</h3>
+
+<pre><code>oc get datasource rhel9 -n openshift-virtualization-os-images
+</code></pre>
+
+<p>The <code>READY</code> column must show <code>True</code>. If it shows <code>False</code>:</p>
+
+<pre><code>oc describe datasource rhel9 -n openshift-virtualization-os-images
+<h1>Look at the Conditions section for the reason</h1>
+</code></pre>
+
+<hr>
+
+<h3>Step 4 — Create the project</h3>
+
+<pre><code>oc new-project burner-rhel-density
+</code></pre>
+
+<hr>
+
+<h3>Step 5 — Create the Service Account</h3>
+
+<pre><code>oc create serviceaccount kube-burner -n burner-rhel-density
+</code></pre>
+
+<hr>
+
+<h3>Step 6 — Apply permissions (RBAC)</h3>
+
+<p>RHEL VMs need CDI (Containerized Data Importer) permissions in addition to the standard KubeVirt permissions — CDI manages the PVC clone from the golden image.</p>
+
+<pre><code>oc apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, pods, services, endpoints, configmaps, secrets, nodes, events,
+                replicationcontrollers, serviceaccounts, persistentvolumeclaims]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances]
+    verbs: [get, list, watch, create, delete, update, patch]
+  - apiGroups: [subresources.kubevirt.io]
+    resources: [virtualmachines/start, virtualmachines/stop]
+    verbs: [update]
+  - apiGroups: [cdi.kubevirt.io]
+    resources: [datavolumes, datasources]
+    verbs: [get, list, watch, create, delete, update, patch]
+<hr>
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-burner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-burner
+subjects:
+  - kind: ServiceAccount
+    name: kube-burner
+    namespace: burner-rhel-density
+EOF
+</code></pre>
+
+<blockquote><strong>Note the addition vs Test 09:</strong> The <code>cdi.kubevirt.io</code> apiGroup is required for DataVolume operations. Without it, the PVC clone from the RHEL golden image is rejected with a permission error.</blockquote>
+
+<hr>
+
+<h3>Step 7 — Create the config files</h3>
+
+<p><strong>File 1 — RHEL 9 VM template</strong></p>
+
+<pre><code><strong>Option A — Download from repo (recommended):</strong>
+
+<p></code></pre>bash<br>
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/09b-rhel-density"</p>
+
+<p>curl --fail -sL "${BASE}/rhel-density-vm.yml" -o /tmp/rhel-density-vm.yml<br>
+curl --fail -sL "${BASE}/rhel-density-config.yml" -o /tmp/rhel-density-config.yml<br>
+<pre><code><br>
+Verify:</p>
+
+<p></code></pre>bash<br>
+head -2 /tmp/rhel-density-vm.yml   # must start with: apiVersion: kubevirt.io/v1 or global:<br>
+head -2 /tmp/rhel-density-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:<br>
+<pre><code><br>
+<details><br>
+<summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary></p>
+
+<p>cat > /tmp/rhel-density-vm.yml << 'EOF'<br>
+apiVersion: kubevirt.io/v1<br>
+kind: VirtualMachine<br>
+metadata:<br>
+  name: rhel-vm-{{.Iteration}}-{{.Replica}}<br>
+  labels:<br>
+    app: kube-burner-rhel<br>
+    kube-burner-job: create-rhel-vms<br>
+spec:<br>
+  runStrategy: Always<br>
+  dataVolumeTemplates:<br>
+    - metadata:<br>
+        name: rhel-disk-{{.Iteration}}-{{.Replica}}<br>
+      spec:<br>
+        sourceRef:<br>
+          kind: DataSource<br>
+          name: rhel9<br>
+          namespace: openshift-virtualization-os-images<br>
+        storage:<br>
+          storageClassName: ""       # Leave blank to use cluster default<br>
+          accessModes:<br>
+            - ReadWriteMany          # ReadWriteMany enables live migration<br>
+          resources:<br>
+            requests:<br>
+              storage: 30Gi<br>
+  template:<br>
+    metadata:<br>
+      labels:<br>
+        app: kube-burner-rhel<br>
+        kube-burner-job: create-rhel-vms<br>
+    spec:<br>
+      domain:<br>
+        cpu:<br>
+          cores: 1<br>
+        resources:<br>
+          requests:<br>
+            memory: 2Gi<br>
+        devices:<br>
+          disks:<br>
+            - name: rootdisk<br>
+              disk:<br>
+                bus: virtio<br>
+            - name: cloudinitdisk<br>
+              disk:<br>
+                bus: virtio<br>
+          interfaces:<br>
+            - name: default<br>
+              masquerade: {}<br>
+      networks:<br>
+        - name: default<br>
+          pod: {}<br>
+      volumes:<br>
+        - name: rootdisk<br>
+          dataVolume:<br>
+            name: rhel-disk-{{.Iteration}}-{{.Replica}}<br>
+        - name: cloudinitdisk<br>
+          cloudInitNoCloud:<br>
+            userData: |<br>
+              #cloud-config<br>
+              hostname: rhel-vm-{{.Iteration}}-{{.Replica}}<br>
+              user: cloud-user<br>
+              password: redhat123<br>
+              chpasswd:<br>
+                expire: false<br>
+              ssh_pwauth: true<br>
+EOF<br>
+</code></pre></p>
+
+<blockquote><strong><code>storageClassName: ""</code></strong> — leave blank to use your cluster's default storage class. To use a specific class, replace <code>""</code> with the class name from <code>oc get storageclass</code>.</blockquote>
+
+<hr>
+
+<p><strong>File 2 — Main config</strong></p>
+
+<pre><code>cat > /tmp/rhel-density-config.yml << 'EOF'
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+<p>jobs:<br>
+  # ============================================================<br>
+  # PHASE 1: CREATE — 3 RHEL 9 VMs, 2Gi each<br>
+  # PVC clone from golden image takes 2–5 minutes before boot<br>
+  # VMIRunning P99 target: < 180s on healthy cluster<br>
+  # ============================================================<br>
+  - name: create-rhel-vms<br>
+    namespace: burner-rhel-density<br>
+    jobType: create<br>
+    jobIterations: 1<br>
+    namespacedIterations: false<br>
+    qps: 3<br>
+    burst: 3<br>
+    objects:<br>
+      - objectTemplate: /config/rhel-density-vm.yml<br>
+        replicas: 3<br>
+    waitWhenFinished: true<br>
+    maxWaitTimeout: 20m<br>
+    jobPause: 60s</p>
+
+<p># ============================================================<br>
+  # PHASE 2: DELETE — remove all RHEL VMs and their PVCs<br>
+  # ============================================================<br>
+  - name: delete-rhel-vms<br>
+    namespace: burner-rhel-density<br>
+    jobType: delete<br>
+    qps: 3<br>
+    burst: 3<br>
+    objects:<br>
+      - kind: VirtualMachine<br>
+        apiVersion: kubevirt.io/v1<br>
+        labelSelector:<br>
+          kube-burner-job: create-rhel-vms<br>
+EOF<br>
+</code></pre></p>
+
+<blockquote><strong>Why <code>qps: 3</code> instead of 5?</strong> Each RHEL VM triggers a 30Gi PVC clone from the golden image. Launching too many simultaneously can overload the CDI importer and the storage backend. 3 concurrent clones is a safe starting point.</blockquote>
+
+<blockquote><strong>Why <code>maxWaitTimeout: 20m</code>?</strong> RHEL 9 takes 60–120 seconds to boot after the PVC clone completes. The clone itself takes 2–5 minutes. 20 minutes gives the full pipeline enough headroom on a healthy cluster.</blockquote>
+
+<hr>
+
+<h3>Step 7b — Verify both files</h3>
+
+<pre><code>ls -lh /tmp/rhel-density-vm.yml /tmp/rhel-density-config.yml
+</code></pre>
+
+<p>Both must show non-zero sizes before continuing.</p>
+
+<hr>
+
+<h3>Step 8 — Package into a ConfigMap</h3>
+
+<pre><code></details>
+
+<p>oc create configmap rhel-density-config \<br>
+  --from-file=config.yml=/tmp/rhel-density-config.yml \<br>
+  --from-file=rhel-density-vm.yml=/tmp/rhel-density-vm.yml \<br>
+  -n burner-rhel-density<br>
+</code></pre></p>
+
+<hr>
+
+<h3>Step 9 — Launch the test</h3>
+
+<p><strong>Standard version:</strong></p>
+
+<pre><code>cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-rhel-density
+  namespace: burner-rhel-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=rhel-density-001]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: rhel-density-config
+        - name: workdir
+          emptyDir: {}
+EOF
+</code></pre>
+
+<p><strong>Quota-safe version (STIG-hardened clusters):</strong></p>
+
+<pre><code>cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-rhel-density
+  namespace: burner-rhel-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 100m
+            limits:
+              memory: 128Mi
+              cpu: 200m
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=rhel-density-001]
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 256Mi
+              cpu: 500m
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: rhel-density-config
+        - name: workdir
+          emptyDir: {}
+EOF
+</code></pre>
+
+<hr>
+
+<h3>Step 10 — Watch the PVC clones (Tab 3)</h3>
+
+<p>Switch to <strong>Storage → PersistentVolumeClaims</strong> in the console, filtered to <code>burner-rhel-density</code>.</p>
+
+<p>You will see 3 PVCs appear. Their status cycles:</p>
+
+<tr><td>PVC status</td><td>Meaning</td></tr>
+<tr><td>---</td><td>---</td></tr>
+<tr><td><code>Pending</code></td><td>CDI waiting to start import</td></tr>
+<tr><td><code>Bound</code> (with DataVolume <code>ImportInProgress</code>)</td><td>Cloning from golden image</td></tr>
+<tr><td><code>Bound</code> (DataVolume <code>Succeeded</code>)</td><td>Clone complete — VM can now boot</td></tr>
+
+<p><strong>This is what to show a customer here:</strong> <em>"Each of these PVCs is a full 30Gi RHEL 9 disk being cloned from the golden master image — on-demand, in parallel, with no manual intervention."</em></p>
+
+<hr>
+
+<h3>Step 11 — Watch the VMs boot (Tab 2)</h3>
+
+<p>Switch to <strong>Virtualization → VirtualMachines</strong>, namespace <code>burner-rhel-density</code>.</p>
+
+<p>VMs appear after their PVC clone completes. State progression:</p>
+
+<p><code>Stopped</code> → <code>Starting</code> → <code>Running</code> ✅</p>
+
+<p>RHEL 9 typically takes <strong>60–120 seconds</strong> to boot after the disk is ready. This is normal — you are watching a full operating system boot, not a container start.</p>
+
+<hr>
+
+<h3>Step 12 — Stream the live results</h3>
+
+<pre><code>oc logs -f job/kb-rhel-density -n burner-rhel-density
+</code></pre>
+
+<p>Look for lines like:</p>
+
+<pre><code>level=info msg="create-rhel-vms: VMIRunning 99th: 145000 ms  max: 162000 ms  avg: 138000 ms"
+level=info msg="create-rhel-vms: VMReady 99th: 148000 ms  max: 165000 ms  avg: 141000 ms"
+</code></pre>
+
+<p><strong>Typical RHEL 9 boot time (VMIRunning P99): 120–180 seconds</strong> on a healthy cluster with fast storage.  <br>
+If your VMs take longer than 300 seconds, check storage class throughput and CDI importer logs.</p>
+
+<hr>
+
+<h3>Step 13 — Compare against CirrOS baseline</h3>
+
+<tr><td>Metric</td><td>CirrOS (Test 09)</td><td>RHEL 9 (Test 09b)</td><td>Ratio</td></tr>
+<tr><td>---</td><td>---</td><td>---</td><td>---</td></tr>
+<tr><td>VMIRunning P99</td><td>~17s</td><td>~145s</td><td>~8× slower</td></tr>
+<tr><td>VMReady P99</td><td>~17s</td><td>~150s</td><td>~9× slower</td></tr>
+<tr><td>RAM per VM</td><td>128Mi</td><td>2Gi</td><td>16× more</td></tr>
+<tr><td>Storage per VM</td><td>0</td><td>30Gi</td><td>—</td></tr>
+
+<p>This comparison is the answer to: <em>"How much slower is a real OS vs a toy benchmark?"</em></p>
+
+<hr>
+
+<h3>Step 14 — Clean up</h3>
+
+<pre><code>oc delete job kb-rhel-density -n burner-rhel-density
+oc delete configmap rhel-density-config -n burner-rhel-density
+oc delete project burner-rhel-density
+</code></pre>
+
+<blockquote><strong>Note:</strong> Deleting the project also deletes the 3 × 30Gi PVCs. Confirm storage is reclaimed with <code>oc get pvc -n burner-rhel-density</code> (should return nothing after the project is deleted).</blockquote>
+
+<hr>
+
+<h2>Troubleshooting</h2>
+
+<tr><td>Problem</td><td>What to check</td><td>Fix</td></tr>
+<tr><td>---</td><td>---</td><td>---</td></tr>
+<tr><td><code>datasource rhel9 not found</code></td><td>Golden image not imported</td><td>Ask cluster admin to enable RHEL 9 golden image in OCP Virt operator</td></tr>
+<tr><td><code>DataVolume stuck in ImportInProgress</code></td><td>Storage class too slow or capacity issue</td><td>Check CDI importer logs: <code>oc logs -n openshift-cnv -l app=containerized-data-importer</code></td></tr>
+<tr><td>VMs stuck in <code>Starting</code> > 5 min</td><td>Golden image clone still in progress</td><td>Check <code>oc get datavolume -n burner-rhel-density</code> — wait for <code>PHASE: Succeeded</code></td></tr>
+<tr><td><code>permission denied</code> on DataVolume</td><td>CDI RBAC not applied</td><td>Confirm Step 6 added <code>cdi.kubevirt.io</code> rules to the ClusterRole</td></tr>
+<tr><td><code>failed quota: must specify memory</code></td><td>STIG ResourceQuota enforced</td><td>Use the quota-safe Job variant in Step 9</td></tr>
+<tr><td>PVCs not cleaning up after delete</td><td>PVC reclaim policy is <code>Retain</code></td><td>Manually delete: <code>oc delete pvc --all -n burner-rhel-density</code></td></tr>
+
+<hr>
+
+<h2>What good results look like</h2>
+
+<tr><td>Metric</td><td>Good</td><td>Investigate</td></tr>
+<tr><td>---</td><td>---</td><td>---</td></tr>
+<tr><td>PVC clone time per VM</td><td>2–5 minutes</td><td>> 10 minutes</td></tr>
+<tr><td>VMIRunning P99</td><td>120–180 seconds</td><td>> 300 seconds</td></tr>
+<tr><td>All VMs reach Running</td><td>Yes</td><td>Any VM stuck in <code>Starting</code> > 10 min</td></tr>
+<tr><td>Storage reclaimed after delete</td><td>Yes</td><td>PVCs remaining after project deleted</td></tr>
+
+<hr>
+
+<p><em>Next: <a href="09c-rhel-density-escalation.md">Test 09c — RHEL 9 Density Escalation</a> | Compare with: <a href="09-kubevirt-density.md">Test 09 — CirrOS Density</a> | Production scale: <a href="23-vm-density-rhel.md">Test 23 — RHEL Fleet Density</a></em></p>
+</body></html>

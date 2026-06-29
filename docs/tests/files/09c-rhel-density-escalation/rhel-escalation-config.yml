@@ -1,0 +1,120 @@
+global:
+  gc: false
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # ─────────────────────────────────────────
+  # ROUND 1 — 3 RHEL VMs
+  # ─────────────────────────────────────────
+  - name: rhel-round1-create
+    namespace: burner-rhel-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 3
+    burst: 3
+    objects:
+      - objectTemplate: /config/rhel-escalation-vm.yml
+        replicas: 3
+    waitWhenFinished: true
+    maxWaitTimeout: 25m
+    jobPause: 30s
+
+  - name: rhel-round1-delete
+    namespace: burner-rhel-escalation
+    jobType: delete
+    qps: 3
+    burst: 3
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: rhel-round1-create
+    jobPause: 60s
+
+  # ─────────────────────────────────────────
+  # ROUND 2 — 6 RHEL VMs
+  # ─────────────────────────────────────────
+  - name: rhel-round2-create
+    namespace: burner-rhel-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 3
+    burst: 3
+    objects:
+      - objectTemplate: /config/rhel-escalation-vm.yml
+        replicas: 6
+    waitWhenFinished: true
+    maxWaitTimeout: 35m
+    jobPause: 30s
+
+  - name: rhel-round2-delete
+    namespace: burner-rhel-escalation
+    jobType: delete
+    qps: 3
+    burst: 3
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: rhel-round2-create
+    jobPause: 60s
+
+  # ─────────────────────────────────────────
+  # ROUND 3 — 10 RHEL VMs
+  # ─────────────────────────────────────────
+  - name: rhel-round3-create
+    namespace: burner-rhel-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 3
+    burst: 3
+    objects:
+      - objectTemplate: /config/rhel-escalation-vm.yml
+        replicas: 10
+    waitWhenFinished: true
+    maxWaitTimeout: 50m
+    jobPause: 30s
+
+  - name: rhel-round3-delete
+    namespace: burner-rhel-escalation
+    jobType: delete
+    qps: 3
+    burst: 3
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: rhel-round3-create
+    jobPause: 60s
+
+  # ─────────────────────────────────────────
+  # ROUND 4 — 15 RHEL VMs
+  # ─────────────────────────────────────────
+  - name: rhel-round4-create
+    namespace: burner-rhel-escalation
+    jobType: create
+    jobIterations: 1
+    namespacedIterations: false
+    qps: 3
+    burst: 3
+    objects:
+      - objectTemplate: /config/rhel-escalation-vm.yml
+        replicas: 15
+    waitWhenFinished: true
+    maxWaitTimeout: 75m
+    jobPause: 30s
+
+  - name: rhel-round4-delete
+    namespace: burner-rhel-escalation
+    jobType: delete
+    qps: 3
+    burst: 3
+    objects:
+      - kind: VirtualMachine
+        apiVersion: kubevirt.io/v1
+        labelSelector:
+          kube-burner-job: rhel-round4-create
