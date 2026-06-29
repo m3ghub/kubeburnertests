@@ -17,7 +17,7 @@
  ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝      ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
 ```
 
-**25 battle-tested performance benchmarks for Kubernetes and OpenShift Virtualization**  
+**40 battle-tested performance benchmarks for Kubernetes and OpenShift Virtualization**  
 *From first pod to 500 VMs — live-tested on Red Hat OCP 4.18 and 4.21*
 
 </div>
