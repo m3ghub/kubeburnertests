@@ -1,0 +1,297 @@
+= Test 23a — RHEL VM Density Escalation (Set It and Forget It)
+
+_Category:_ OpenShift Virtualization — RHEL 9 VM Density  
+_Namespace:_ `burner-rhel-density-escalation`  
+_Escalation:_ 5 → 10 → 20 → 40 → 80 VMs  
+_Duration:_ ~60–120 min (DataVolume cloning is slower than containerDisk)  
+_Difficulty:_ ⭐⭐⭐⭐ Expert
+
+== What this test does
+
+Automatically runs 5 escalating rounds using RHEL 9 golden images from `openshift-virtualization-os-images`. Each round clones the `rhel9` DataSource PVC for every VM, waits for all VMs to reach Running state, then deletes the VMs and their DataVolumes before the next round.
+
+____
+_Time warning:_ Each RHEL VM requires a PVC clone (~30Gi each). At Round 5 (80 VMs) that is 80 concurrent PVC clones. Allow 90 min per round on busy storage.
+____
+
+| Round | VMs | Storage cloned | Max Wait |
+|-------|-----|----------------|----------|
+| 1 | 5 | ~150 Gi | 90 min |
+| 2 | 10 | ~300 Gi | 90 min |
+| 3 | 20 | ~600 Gi | 90 min |
+| 4 | 40 | ~1.2 Ti | 90 min |
+| 5 | 80 | ~2.4 Ti | 90 min |
+
+'''
+
+== Prerequisites
+
+* OpenShift cluster with OpenShift Virtualization installed
+* `oc` CLI logged in with cluster-admin
+* Verify the RHEL 9 DataSource is available:
+
+[source]
+----
+oc get datasource rhel9 -n openshift-virtualization-os-images
+----
+
+Expected:
+
+[source]
+----
+NAME    AGE   PHASE   READY   MESSAGE
+rhel9   73m   Ready   True    DataSource is ready to be consumed
+----
+
+* If only `rhel8` is available, replace `rhel9` with `rhel8` in the VM template.
+* Verify sufficient storage: `oc get storageclass` — need a CSI-backed class that supports `ReadWriteMany` or PVC cloning.
+
+'''
+
+== Step 1 — Namespace and RBAC
+
+[source]
+----
+oc new-project burner-rhel-density-escalation
+
+oc create serviceaccount kube-burner -n burner-rhel-density-escalation
+
+oc create clusterrole kube-burner-virt \
+  --verb=get,list,watch,create,delete,patch,update \
+  --resource=virtualmachines,virtualmachineinstances,datavolumes,pods,namespaces,configmaps,jobs,events
+
+oc create clusterrolebinding kube-burner-virt-rhel-escalation \
+  --clusterrole=kube-burner-virt \
+  --serviceaccount=burner-rhel-density-escalation:kube-burner
+----
+
+'''
+
+== Step 2 — Download config files
+
+_Option A — Download from repo_
+
+[source]
+----
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/23a-vm-density-rhel-escalation"
+
+curl -fsSL "$BASE/rhel-escalation-config.yml" -o /tmp/rhel-escalation-config.yml
+curl -fsSL "$BASE/vm-template-rhel.yml"        -o /tmp/vm-template-rhel.yml
+----
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+Create `/tmp/vm-template-rhel.yml`:
+
+[source]
+----
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rhel-esc-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: rhel-density-escalation
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: rhel-esc-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: rhel-density-escalation
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: rhel-esc-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rhel-esc-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false
+----
+
+For the full config, see the link:https://github.com/m3ghub/kubeburnertests/blob/main/docs/tests/files/23a-vm-density-rhel-escalation/rhel-escalation-config.yml[repo].
+
+</details>
+
+'''
+
+== Step 3 — Package into ConfigMap
+
+[source]
+----
+oc create configmap rhel-escalation-config \
+  --from-file=config.yml=/tmp/rhel-escalation-config.yml \
+  --from-file=vm-template-rhel.yml=/tmp/vm-template-rhel.yml \
+  -n burner-rhel-density-escalation
+----
+
+'''
+
+== Step 4 — Launch the job
+
+[source]
+----
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-rhel-escalation
+  namespace: burner-rhel-density-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - rhel-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: rhel-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+----
+
+____
+_Re-run note:_ Change `--uuid rhel-escalation-001` to a new unique value (e.g. `rhel-escalation-002`) on each subsequent run to avoid metric conflicts.
+____
+
+'''
+
+== Step 5 — Monitor
+
+[source]
+----
+= Watch job pod
+oc get pods -n burner-rhel-density-escalation -w
+
+= Stream logs
+oc logs -f job/kb-rhel-escalation -n burner-rhel-density-escalation
+
+= Watch DataVolume cloning progress (especially important in early rounds)
+watch -n10 'oc get dv -n burner-rhel-density-escalation | tail -20'
+
+= Watch VM status
+watch -n10 'oc get vm -n burner-rhel-density-escalation | tail -20'
+----
+
+_Expected output per round:_
+
+[source]
+----
+time="..." level=info msg="Triggering job: r01-create" ...
+time="..." level=info msg="VMIRunning 99th: 45000 ms max: 55000 ms avg: 45000 ms" ...
+time="..." level=info msg="Job r01-create took 4m30s" ...
+time="..." level=info msg="Triggering job: r01-delete" ...
+----
+
+'''
+
+== Force-stop a stuck or failing round
+
+[source]
+----
+= Delete the job
+oc delete job kb-rhel-escalation -n burner-rhel-density-escalation
+
+= Delete VMs (DataVolumes will be garbage-collected automatically)
+oc delete vm -l app=rhel-density-escalation -n burner-rhel-density-escalation --wait=false
+
+= If DVs linger, delete them explicitly
+oc delete dv --all -n burner-rhel-density-escalation --wait=false
+
+= Watch cleanup progress
+oc get vm,dv -n burner-rhel-density-escalation -w
+----
+
+'''
+
+== Cleanup
+
+[source]
+----
+oc delete job kb-rhel-escalation -n burner-rhel-density-escalation 2>/dev/null || true
+oc delete configmap rhel-escalation-config -n burner-rhel-density-escalation 2>/dev/null || true
+oc delete vm -l app=rhel-density-escalation -n burner-rhel-density-escalation --wait=false 2>/dev/null || true
+oc delete dv --all -n burner-rhel-density-escalation --wait=false 2>/dev/null || true
+oc delete project burner-rhel-density-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-rhel-escalation
+----
+
+'''
+
+== Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| DataVolume stuck `Cloning` | Storage class doesn't support cloning | Use a CSI class; check `oc get storageclass` |
+| `rhel9` DataSource not found | OS image not imported | Run `oc get datasource -n openshift-virtualization-os-images` |
+| VMs stuck `Pending` | Not enough memory (2Gi each) | Reduce `replicas` in round config |
+| Round times out | PVC cloning slow under load | Increase `maxWaitTimeout` to `120m` |
+
+'''
+
+== Related tests
+
+* link:23-vm-density-rhel.md[23-vm-density-rhel.md] — Single-shot RHEL density
+* link:24a-vm-density-windows-escalation.md[24a-vm-density-windows-escalation.md] — Windows escalation
+* link:25a-vm-density-mixed-escalation.md[25a-vm-density-mixed-escalation.md] — Mixed Windows+RHEL escalation

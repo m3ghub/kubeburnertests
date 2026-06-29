@@ -1,0 +1,115 @@
+global:
+  gc: true
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Round 01: 10 VMIs
+  - name: r01-create
+    jobType: create
+    namespace: burner-vmi-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 10
+
+  - name: r01-delete
+    jobType: delete
+    namespace: burner-vmi-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  # Round 02: 25 VMIs
+  - name: r02-create
+    jobType: create
+    namespace: burner-vmi-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 25
+
+  - name: r02-delete
+    jobType: delete
+    namespace: burner-vmi-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  # Round 03: 50 VMIs
+  - name: r03-create
+    jobType: create
+    namespace: burner-vmi-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 50
+
+  - name: r03-delete
+    jobType: delete
+    namespace: burner-vmi-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  # Round 04: 100 VMIs
+  - name: r04-create
+    jobType: create
+    namespace: burner-vmi-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 100
+
+  - name: r04-delete
+    jobType: delete
+    namespace: burner-vmi-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  # Round 05: 200 VMIs
+  - name: r05-create
+    jobType: create
+    namespace: burner-vmi-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 45m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 200
+
+  - name: r05-delete
+    jobType: delete
+    namespace: burner-vmi-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-create

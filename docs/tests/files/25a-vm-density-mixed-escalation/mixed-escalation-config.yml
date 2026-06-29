@@ -1,0 +1,180 @@
+global:
+  gc: true
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Round 01: 5 VMs (3 Windows + 2 RHEL)
+  - name: r01-create-windows
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-windows.yml
+        replicas: 3
+
+  - name: r01-create-rhel
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 2
+
+  - name: r01-delete
+    jobType: delete
+    namespace: burner-mixed-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-fleet-escalation
+
+  # Round 02: 10 VMs (7 Windows + 3 RHEL)
+  - name: r02-create-windows
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-windows.yml
+        replicas: 7
+
+  - name: r02-create-rhel
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 3
+
+  - name: r02-delete
+    jobType: delete
+    namespace: burner-mixed-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-fleet-escalation
+
+  # Round 03: 20 VMs (14 Windows + 6 RHEL)
+  - name: r03-create-windows
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-windows.yml
+        replicas: 14
+
+  - name: r03-create-rhel
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 6
+
+  - name: r03-delete
+    jobType: delete
+    namespace: burner-mixed-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-fleet-escalation
+
+  # Round 04: 30 VMs (21 Windows + 9 RHEL)
+  - name: r04-create-windows
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-windows.yml
+        replicas: 21
+
+  - name: r04-create-rhel
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 9
+
+  - name: r04-delete
+    jobType: delete
+    namespace: burner-mixed-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-fleet-escalation
+
+  # Round 05: 50 VMs (35 Windows + 15 RHEL)
+  - name: r05-create-windows
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: false
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-windows.yml
+        replicas: 35
+
+  - name: r05-create-rhel
+    jobType: create
+    namespace: burner-mixed-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    podWait: false
+    waitWhenFinished: true
+    maxWaitTimeout: 120m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 15
+
+  - name: r05-delete
+    jobType: delete
+    namespace: burner-mixed-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          app: mixed-fleet-escalation

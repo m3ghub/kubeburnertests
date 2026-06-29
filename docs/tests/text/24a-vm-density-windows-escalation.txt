@@ -1,0 +1,265 @@
+Test 24a — Windows VM Density Escalation (Set It and Forget It)
+
+Category: OpenShift Virtualization — Windows Server 2022 VM Density  
+Namespace: burner-windows-density-escalation  
+Escalation: 2 → 5 → 10 → 20 → 40 VMs  
+Duration: ~90–180 min  
+Difficulty: ⭐⭐⭐⭐⭐ Expert
+
+What this test does
+
+Automatically runs 5 escalating rounds using Windows Server 2022 golden images cloned from the win2k22 PVC in openshift-virtualization-os-images. Each round provisions VMs (including full PVC clones), waits for all VMs to reach Running state, then deletes everything before the next round.
+
+Time warning: Each Windows VM requires a 60Gi PVC clone. At Round 5 (40 VMs) that is 2.4 Ti of PVC cloning. Allow 120 min per round on standard storage.
+
+| Round | VMs | Storage cloned | Max Wait |
+|-------|-----|----------------|----------|
+| 1 | 2 | ~120 Gi | 120 min |
+| 2 | 5 | ~300 Gi | 120 min |
+| 3 | 10 | ~600 Gi | 120 min |
+| 4 | 20 | ~1.2 Ti | 120 min |
+| 5 | 40 | ~2.4 Ti | 120 min |
+
+---
+
+Prerequisites
+
+- OpenShift cluster with OpenShift Virtualization installed
+- oc CLI logged in with cluster-admin
+- Verify the Windows PVC is available:
+
+``bash
+oc get pvc win2k22 -n openshift-virtualization-os-images
+`
+
+Expected:
+
+`
+NAME      STATUS   VOLUME      CAPACITY   ACCESS MODES   STORAGECLASS
+win2k22   Bound    pvc-xxxxx   60Gi       RWX            ocs-storagecluster-ceph-rbd
+`
+
+- If the PVC name differs on your cluster, update name: win2k22 in the VM template.
+- Each VM needs 8 Gi RAM and 2 vCPUs — check available capacity: oc describe nodes | grep -A5 "Allocatable"
+
+---
+
+Step 1 — Namespace and RBAC
+
+`bash
+oc new-project burner-windows-density-escalation
+
+oc create serviceaccount kube-burner -n burner-windows-density-escalation
+
+oc create clusterrole kube-burner-virt \
+  --verb=get,list,watch,create,delete,patch,update \
+  --resource=virtualmachines,virtualmachineinstances,datavolumes,pods,namespaces,configmaps,jobs,events
+
+oc create clusterrolebinding kube-burner-virt-win-escalation \
+  --clusterrole=kube-burner-virt \
+  --serviceaccount=burner-windows-density-escalation:kube-burner
+`
+
+---
+
+Step 2 — Download config files
+
+Option A — Download from repo
+
+`bash
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/24a-vm-density-windows-escalation"
+
+curl -fsSL "$BASE/windows-escalation-config.yml" -o /tmp/windows-escalation-config.yml
+curl -fsSL "$BASE/vm-template-windows.yml"        -o /tmp/vm-template-windows.yml
+`
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+Create /tmp/vm-template-windows.yml:
+
+`yaml
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-esc-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: windows-density-escalation
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: win-esc-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        source:
+          pvc:
+            namespace: openshift-virtualization-os-images
+            name: win2k22
+        storage:
+          resources:
+            requests:
+              storage: 60Gi
+  template:
+    metadata:
+      labels:
+        app: windows-density-escalation
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 8Gi
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            vapic: {}
+            spinlocks:
+              spinlocks: 8191
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: win-esc-disk-{{.Iteration}}-{{.Replica}}
+`
+
+For the full config, see the repo.
+
+</details>
+
+---
+
+Step 3 — Package into ConfigMap
+
+`bash
+oc create configmap windows-escalation-config \
+  --from-file=config.yml=/tmp/windows-escalation-config.yml \
+  --from-file=vm-template-windows.yml=/tmp/vm-template-windows.yml \
+  -n burner-windows-density-escalation
+`
+
+---
+
+Step 4 — Launch the job
+
+`bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-win-escalation
+  namespace: burner-windows-density-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - win-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: windows-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+`
+
+Re-run note: Change --uuid win-escalation-001 to a unique value on each run.
+
+---
+
+Step 5 — Monitor
+
+`bash
+Watch job pod
+oc get pods -n burner-windows-density-escalation -w
+
+Stream logs
+oc logs -f job/kb-win-escalation -n burner-windows-density-escalation
+
+Watch DataVolume cloning (the slow part for Windows)
+watch -n15 'oc get dv -n burner-windows-density-escalation | grep -v Succeeded | head -20'
+
+Watch VM status
+watch -n15 'oc get vm -n burner-windows-density-escalation | tail -20'
+`
+
+---
+
+Force-stop a stuck or failing round
+
+`bash
+oc delete job kb-win-escalation -n burner-windows-density-escalation
+
+oc delete vm -l app=windows-density-escalation -n burner-windows-density-escalation --wait=false
+
+oc delete dv --all -n burner-windows-density-escalation --wait=false
+
+oc get vm,dv -n burner-windows-density-escalation -w
+`
+
+---
+
+Cleanup
+
+`bash
+oc delete job kb-win-escalation -n burner-windows-density-escalation 2>/dev/null || true
+oc delete configmap windows-escalation-config -n burner-windows-density-escalation 2>/dev/null || true
+oc delete vm -l app=windows-density-escalation -n burner-windows-density-escalation --wait=false 2>/dev/null || true
+oc delete dv --all -n burner-windows-density-escalation --wait=false 2>/dev/null || true
+oc delete project burner-windows-density-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-win-escalation
+`
+
+---
+
+Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| DataVolume stuck Cloning | Storage doesn't support PVC clone | Check storage class; OCS/Ceph required |
+| win2k22 PVC not found | Name differs on this cluster | oc get pvc -n openshift-virtualization-os-images |
+| VMs stuck Pending | Insufficient 8Gi RAM slots | Reduce replicas; check node capacity |
+| VM CrashLoopBackOff | Windows boot error | Check VM console: virtctl console win-esc-0-1 -n burner-windows-density-escalation` |
+
+---
+
+Related tests
+
+- 24-vm-density-windows.md — Single-shot Windows density
+- 23a-vm-density-rhel-escalation.md — RHEL escalation
+- 25a-vm-density-mixed-escalation.md — Mixed Windows+RHEL escalation

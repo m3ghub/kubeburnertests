@@ -1,0 +1,255 @@
+global:
+  gc: true
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Round 01: 2 VMs
+  - name: r01-create
+    jobType: create
+    namespace: burner-migration-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 2
+        wait: false
+
+  - name: r01-start
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  - name: r01-migrate
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 120s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  - name: r01-stop
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  - name: r01-delete
+    jobType: delete
+    namespace: burner-migration-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  # Round 02: 4 VMs
+  - name: r02-create
+    jobType: create
+    namespace: burner-migration-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 4
+        wait: false
+
+  - name: r02-start
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  - name: r02-migrate
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 180s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  - name: r02-stop
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  - name: r02-delete
+    jobType: delete
+    namespace: burner-migration-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  # Round 03: 8 VMs
+  - name: r03-create
+    jobType: create
+    namespace: burner-migration-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 8
+        wait: false
+
+  - name: r03-start
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  - name: r03-migrate
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 300s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  - name: r03-stop
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  - name: r03-delete
+    jobType: delete
+    namespace: burner-migration-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  # Round 04: 16 VMs
+  - name: r04-create
+    jobType: create
+    namespace: burner-migration-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 16
+        wait: false
+
+  - name: r04-start
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  - name: r04-migrate
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 480s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  - name: r04-stop
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  - name: r04-delete
+    jobType: delete
+    namespace: burner-migration-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  # Round 05: 32 VMs
+  - name: r05-create
+    jobType: create
+    namespace: burner-migration-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 20m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 32
+        wait: false
+
+  - name: r05-start
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: start
+        labelSelector:
+          kube-burner.io/job: r05-create
+
+  - name: r05-migrate
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 600s
+    objects:
+      - kubeVirtOp: migrate
+        labelSelector:
+          kube-burner.io/job: r05-create
+
+  - name: r05-stop
+    jobType: kubevirt
+    executionMode: parallel
+    jobPause: 60s
+    objects:
+      - kubeVirtOp: stop
+        labelSelector:
+          kube-burner.io/job: r05-create
+
+  - name: r05-delete
+    jobType: delete
+    namespace: burner-migration-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-create

@@ -1,0 +1,115 @@
+global:
+  gc: true
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Round 01: 5 RHEL VMs
+  - name: r01-create
+    jobType: create
+    namespace: burner-rhel-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 5
+
+  - name: r01-delete
+    jobType: delete
+    namespace: burner-rhel-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  # Round 02: 10 RHEL VMs
+  - name: r02-create
+    jobType: create
+    namespace: burner-rhel-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 10
+
+  - name: r02-delete
+    jobType: delete
+    namespace: burner-rhel-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  # Round 03: 20 RHEL VMs
+  - name: r03-create
+    jobType: create
+    namespace: burner-rhel-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 20
+
+  - name: r03-delete
+    jobType: delete
+    namespace: burner-rhel-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  # Round 04: 40 RHEL VMs
+  - name: r04-create
+    jobType: create
+    namespace: burner-rhel-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 40
+
+  - name: r04-delete
+    jobType: delete
+    namespace: burner-rhel-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  # Round 05: 80 RHEL VMs
+  - name: r05-create
+    jobType: create
+    namespace: burner-rhel-density-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 90m
+    objects:
+      - objectTemplate: /config/vm-template-rhel.yml
+        replicas: 80
+
+  - name: r05-delete
+    jobType: delete
+    namespace: burner-rhel-density-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-create

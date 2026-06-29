@@ -1,0 +1,226 @@
+# Test 20a — OCP VMI Density Escalation (Set It and Forget It)
+
+**Category:** OpenShift Virtualization — VMI Control Plane Stress  
+**Namespace:** `burner-vmi-density-escalation`  
+**Escalation:** 10 → 25 → 50 → 100 → 200 VMIs  
+**Duration:** ~30–60 min  
+**Difficulty:** ⭐⭐⭐⭐ Expert
+
+## What this test does
+
+Automatically runs 5 escalating rounds of VirtualMachineInstance creation to stress the `virt-controller` and `virt-handler` components. Each round creates VMIs, waits for all to reach Running state, then deletes them. Monitors control-plane memory growth across rounds.
+
+| Round | VMIs | Max Wait |
+|-------|------|----------|
+| 1 | 10 | 45 min |
+| 2 | 25 | 45 min |
+| 3 | 50 | 45 min |
+| 4 | 100 | 45 min |
+| 5 | 200 | 45 min |
+
+---
+
+## Prerequisites
+
+- OpenShift cluster with OpenShift Virtualization installed
+- `oc` CLI logged in with cluster-admin
+- For 200 VMI round: at least 6 worker nodes with sufficient CPU/memory
+
+---
+
+## Step 1 — Namespace and RBAC
+
+```bash
+oc new-project burner-vmi-density-escalation
+
+oc create serviceaccount kube-burner -n burner-vmi-density-escalation
+
+oc create clusterrole kube-burner-virt \
+  --verb=get,list,watch,create,delete,patch,update \
+  --resource=virtualmachines,virtualmachineinstances,pods,namespaces,configmaps,jobs,events
+
+oc create clusterrolebinding kube-burner-virt-vmi-escalation \
+  --clusterrole=kube-burner-virt \
+  --serviceaccount=burner-vmi-density-escalation:kube-burner
+```
+
+---
+
+## Step 2 — Download config files
+
+**Option A — Download from repo**
+
+```bash
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/20a-ocp-vmi-density-escalation"
+
+curl -fsSL "$BASE/vmi-escalation-config.yml" -o /tmp/vmi-escalation-config.yml
+curl -fsSL "$BASE/vm-template.yml"           -o /tmp/vm-template.yml
+```
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+Create `/tmp/vm-template.yml`:
+
+```yaml
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vmi-esc-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: vmi-density-escalation
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: vmi-density-escalation
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+```
+
+For the full config, see the [repo](https://github.com/m3ghub/kubeburnertests/blob/main/docs/tests/files/20a-ocp-vmi-density-escalation/vmi-escalation-config.yml).
+
+</details>
+
+---
+
+## Step 3 — Package into ConfigMap
+
+```bash
+oc create configmap vmi-escalation-config \
+  --from-file=config.yml=/tmp/vmi-escalation-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-vmi-density-escalation
+```
+
+---
+
+## Step 4 — Launch the job
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-vmi-escalation
+  namespace: burner-vmi-density-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - vmi-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: vmi-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+```
+
+---
+
+## Step 5 — Monitor
+
+```bash
+# Watch job pod
+oc get pods -n burner-vmi-density-escalation -w
+
+# Stream logs
+oc logs -f job/kb-vmi-escalation -n burner-vmi-density-escalation
+
+# Watch virt-controller memory across rounds (run from another terminal)
+watch -n10 'oc top pods -n openshift-cnv | grep virt-controller'
+```
+
+**Expected output per round:**
+
+```
+time="..." level=info msg="Triggering job: r01-create" ...
+time="..." level=info msg="VMIRunning 99th: 9500 ms max: 10000 ms avg: 9500 ms" ...
+time="..." level=info msg="Job r01-create took 45s" ...
+time="..." level=info msg="Triggering job: r01-delete" ...
+```
+
+---
+
+## Force-stop a stuck or failing round
+
+```bash
+oc delete job kb-vmi-escalation -n burner-vmi-density-escalation
+oc delete vm -l app=vmi-density-escalation -n burner-vmi-density-escalation --wait=false
+oc get vm -n burner-vmi-density-escalation -w
+```
+
+---
+
+## Cleanup
+
+```bash
+oc delete job kb-vmi-escalation -n burner-vmi-density-escalation 2>/dev/null || true
+oc delete configmap vmi-escalation-config -n burner-vmi-density-escalation 2>/dev/null || true
+oc delete vm -l app=vmi-density-escalation -n burner-vmi-density-escalation --wait=false 2>/dev/null || true
+oc delete project burner-vmi-density-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-vmi-escalation
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| VMs stuck `Scheduling` | Node resource exhaustion | Reduce `replicas`; check `oc describe nodes` |
+| `virt-controller` OOM | Too many concurrent VMIs | Reduce round size or increase controller memory limit |
+| Job `Error` at round 4-5 | Timeout exceeded | Increase `maxWaitTimeout` to `60m` |
+
+---
+
+## Related tests
+
+- [20-ocp-vmi-density.md](20-ocp-vmi-density.md) — Single-shot VMI density
+- [09a-kubevirt-density-escalation.md](09a-kubevirt-density-escalation.md) — CirrOS VM escalation

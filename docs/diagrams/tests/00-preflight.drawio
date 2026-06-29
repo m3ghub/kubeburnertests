@@ -1,0 +1,27 @@
+<mxfile host="app.diagrams.net" modified="2026-06-29T00:00:00Z" agent="kube-burner-docs" version="21.0.0" type="device">
+  <diagram id="test-00" name="Pre-flight Checks — Run Once Before Any Test">
+    <mxGraphModel dx="1400" dy="300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="ttl" value="Pre-flight Checks — Run Once Before Any Test" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="15" width="1320" height="28" as="geometry" /></mxCell>
+        <mxCell id="sub" value="5 checks to verify the cluster is ready to run any kube-burner test" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5f6368;" vertex="1" parent="1"><mxGeometry x="40" y="46" width="1320" height="22" as="geometry" /></mxCell>
+        <mxCell id="start" value="Cluster
+Ready?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=12;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="20" y="105" width="120" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="start" target="c0"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="c0" value="oc get nodes&#xa;&#xa;All nodes Ready" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontColor=#1a1a1a;fontSize=10;arcSize=8;" vertex="1" parent="1"><mxGeometry x="162" y="105" width="226" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c0" target="c1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="c1" value="oc get hyperconverged -A&#xa;&#xa;CNV / KubeVirt&#xa;installed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontColor=#1a1a1a;fontSize=10;arcSize=8;" vertex="1" parent="1"><mxGeometry x="410" y="105" width="226" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c1" target="c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="c2" value="oc get storageclass&#xa;&#xa;Storage class&#xa;available" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontColor=#1a1a1a;fontSize=10;arcSize=8;" vertex="1" parent="1"><mxGeometry x="658" y="105" width="226" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c2" target="c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="c3" value="oc run kb-preflight ...&#xa;&#xa;Image pull&#xa;succeeds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontColor=#1a1a1a;fontSize=10;arcSize=8;" vertex="1" parent="1"><mxGeometry x="906" y="105" width="226" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c3" target="c4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="c4" value="oc get datasource -n&#xa;openshift-virtualization-os-images&#xa;&#xa;OS images&#xa;present" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f0fe;strokeColor=#1a73e8;fontColor=#1a1a1a;fontSize=10;arcSize=8;" vertex="1" parent="1"><mxGeometry x="1154" y="105" width="226" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="c4" target="done"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="done" value="All checks
+passed ✓
+Ready to test!" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1402" y="105" width="160" height="80" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

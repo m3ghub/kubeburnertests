@@ -1,0 +1,352 @@
+Test 09a — KubeVirt Density Escalation (Set It and Forget It)
+
+Category: OpenShift Virtualization — CirrOS VM Density  
+Namespace: burner-escalation  
+Escalation: 5 → 15 → 30 → 60 → 100 VMs  
+Duration: ~20–40 min  
+Difficulty: ⭐⭐⭐ Advanced
+
+What this test does
+
+Automatically runs 5 back-to-back density rounds using lightweight CirrOS VMs. Each round creates VMs, waits for them all to reach Running state, then deletes them before proceeding to the next round. No manual intervention required.
+
+| Round | VMs | Max Wait |
+|-------|-----|----------|
+| 1 | 5 | 30 min |
+| 2 | 15 | 30 min |
+| 3 | 30 | 30 min |
+| 4 | 60 | 30 min |
+| 5 | 100 | 30 min |
+
+---
+
+Prerequisites
+
+- OpenShift cluster with OpenShift Virtualization installed
+- oc CLI logged in with cluster-admin
+- Verify image pull works: oc debug node/<any-node> -- chroot /host crictl pull quay.io/kubevirt/cirros-registry-disk-demo:latest
+
+---
+
+Step 1 — Namespace and RBAC
+
+``bash
+oc new-project burner-escalation
+
+oc create serviceaccount kube-burner -n burner-escalation
+
+oc create clusterrole kube-burner-virt \
+  --verb=get,list,watch,create,delete,patch,update \
+  --resource=virtualmachines,virtualmachineinstances,pods,namespaces,configmaps,jobs,events
+
+oc create clusterrolebinding kube-burner-virt-escalation \
+  --clusterrole=kube-burner-virt \
+  --serviceaccount=burner-escalation:kube-burner
+`
+
+---
+
+Step 2 — Download config files
+
+Option A — Download from repo
+
+`bash
+BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/09a-kubevirt-density-escalation"
+
+curl -fsSL "$BASE/cirros-escalation-config.yml" -o /tmp/cirros-escalation-config.yml
+curl -fsSL "$BASE/vm-template.yml"              -o /tmp/vm-template.yml
+`
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+Create /tmp/cirros-escalation-config.yml:
+
+`yaml
+global:
+  gc: true
+  measurements:
+    - name: vmiLatency
+
+jobs:
+  # Round 01: 5 VMs
+  - name: r01-create
+    jobType: create
+    namespace: burner-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 5
+
+  - name: r01-delete
+    jobType: delete
+    namespace: burner-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r01-create
+
+  # Round 02: 15 VMs
+  - name: r02-create
+    jobType: create
+    namespace: burner-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 15
+
+  - name: r02-delete
+    jobType: delete
+    namespace: burner-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r02-create
+
+  # Round 03: 30 VMs
+  - name: r03-create
+    jobType: create
+    namespace: burner-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 30
+
+  - name: r03-delete
+    jobType: delete
+    namespace: burner-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r03-create
+
+  # Round 04: 60 VMs
+  - name: r04-create
+    jobType: create
+    namespace: burner-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 60
+
+  - name: r04-delete
+    jobType: delete
+    namespace: burner-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r04-create
+
+  # Round 05: 100 VMs
+  - name: r05-create
+    jobType: create
+    namespace: burner-escalation
+    jobIterations: 1
+    namespacedIterations: false
+    waitWhenFinished: true
+    maxWaitTimeout: 30m
+    objects:
+      - objectTemplate: /config/vm-template.yml
+        replicas: 100
+
+  - name: r05-delete
+    jobType: delete
+    namespace: burner-escalation
+    waitForDeletion: true
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        labelSelector:
+          kube-burner.io/job: r05-create
+`
+
+Create /tmp/vm-template.yml:
+
+`yaml
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: escalation-vm-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: burner-escalation
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: burner-escalation
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+`
+
+</details>
+
+---
+
+Step 3 — Package into ConfigMap
+
+`bash
+oc create configmap escalation-config \
+  --from-file=config.yml=/tmp/cirros-escalation-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-escalation
+`
+
+---
+
+Step 4 — Launch the job
+
+`bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-escalation
+  namespace: burner-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - cirros-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+`
+
+---
+
+Step 5 — Monitor
+
+`bash
+Watch job pod
+oc get pods -n burner-escalation -w
+
+Stream logs
+oc logs -f job/kb-escalation -n burner-escalation
+
+Watch VMs during a round
+watch -n5 'oc get vm -n burner-escalation | tail -20'
+`
+
+Expected output per round:
+
+`
+time="..." level=info msg="Triggering job: r01-create" ...
+time="..." level=info msg="Job r01-create took 45s" ...
+time="..." level=info msg="Triggering job: r01-delete" ...
+time="..." level=info msg="Finished execution with UUID: cirros-escalation-001" ...
+`
+
+---
+
+Force-stop a stuck or failing round
+
+`bash
+Delete the job
+oc delete job kb-escalation -n burner-escalation
+
+Delete any remaining VMs
+oc delete vm -l app=burner-escalation -n burner-escalation --wait=false
+
+Watch deletion progress
+oc get vm -n burner-escalation -w
+`
+
+---
+
+Cleanup
+
+`bash
+oc delete job kb-escalation -n burner-escalation 2>/dev/null || true
+oc delete configmap escalation-config -n burner-escalation 2>/dev/null || true
+oc delete vm -l app=burner-escalation -n burner-escalation --wait=false 2>/dev/null || true
+oc delete project burner-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-escalation
+`
+
+---
+
+Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| ImagePullBackOff | Cannot pull CirrOS image | Check registry access; use internal mirror |
+| VMs stuck Pending | Not enough CPU/memory | Reduce replicas in config |
+| Job pod in Error | YAML syntax error | oc describe configmap escalation-config -n burner-escalation |
+| Delete round finds 0 VMs | Wrong labelSelector | Must be kube-burner.io/job: r01-create (not kube-burner-job`) |
+
+---
+
+Related tests
+
+- 09-kubevirt-density.md — Single-shot CirrOS density
+- 09b-rhel-density.md — RHEL single-shot
+- 09c-rhel-density-escalation.md — RHEL escalation
+- 20a-ocp-vmi-density-escalation.md — VMI control-plane stress

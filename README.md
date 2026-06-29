@@ -4,7 +4,7 @@
 
 [![kube-burner](https://img.shields.io/badge/kube--burner-v2.7.3-EE0000?style=for-the-badge&logo=kubernetes&logoColor=white)](https://github.com/kube-burner/kube-burner)
 [![OpenShift](https://img.shields.io/badge/OpenShift-4.12+-EE0000?style=for-the-badge&logo=redhat&logoColor=white)](https://www.openshift.com)
-[![Tests](https://img.shields.io/badge/Tests-25-blue?style=for-the-badge&logo=checkmarx&logoColor=white)](#individual-test-guides)
+[![Tests](https://img.shields.io/badge/Tests-40-blue?style=for-the-badge&logo=checkmarx&logoColor=white)](#individual-test-guides)
 [![Virtualization](https://img.shields.io/badge/OpenShift%20Virtualization-KubeVirt-orange?style=for-the-badge&logo=linux&logoColor=white)](https://www.redhat.com/en/technologies/cloud-computing/openshift/virtualization)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge)](https://www.apache.org/licenses/LICENSE-2.0)
 
@@ -296,6 +296,10 @@ All steps use **copy-paste ready code blocks** — every command is in a fenced 
 | 07 | [Patch Workload](docs/tests/markdown/07-patch.md) | ⭐⭐ Intermediate | 8 min | Bulk PATCH — tests write amplification and etcd throughput |
 | 08 | [Delete Workload](docs/tests/markdown/08-delete.md) | ⭐ Beginner | 5 min | Bulk DELETE — tests GC controller cleanup speed |
 | 09 | [KubeVirt Density](docs/tests/markdown/09-kubevirt-density.md) | ⭐⭐⭐ Advanced | 20 min | Creates CirrOS VMs, boots all at once — baseline virt test |
+| 09b | [RHEL 9 Density](docs/tests/markdown/09b-rhel-density.md) | ⭐⭐⭐⭐ Advanced | 25–45 min | RHEL 9 VM density via DataSource smart-clone — real OS boot latency baseline |
+| 09c | [RHEL 9 Density Escalation](docs/tests/markdown/09c-rhel-density-escalation.md) | ⭐⭐⭐⭐⭐ Expert | 60–120 min | Set It and Forget It: 4 automated RHEL 9 density rounds — finds RHEL ceiling |
+| 09d | [Windows Server 2022 Density](docs/tests/markdown/09d-windows-density.md) | ⭐⭐⭐⭐ Advanced | 30–60 min | Windows Server 2022 density from golden PVC — VMware migration demo test |
+| 09e | [Windows Server 2022 Density Escalation](docs/tests/markdown/09e-windows-density-escalation.md) | ⭐⭐⭐⭐⭐ Expert | 60–180 min | Set It and Forget It: 3 automated Windows density rounds — finds Windows ceiling |
 | 10 | [Health Check](docs/tests/markdown/10-health-check.md) | ⭐ Beginner | 1 min | Confirms cluster is reachable — **run this first** |
 | 11 | [Check Alerts](docs/tests/markdown/11-check-alerts.md) | ⭐⭐ Intermediate | 2 min | Queries Prometheus for any firing alerts |
 | 12 | [Index Metrics](docs/tests/markdown/12-index.md) | ⭐⭐ Intermediate | 3 min | Captures a metrics baseline snapshot |
@@ -311,6 +315,8 @@ Requires OpenShift Virtualization. All use CirrOS containerDisk (fast, small, no
 | 13 | [VM Live Migration](docs/tests/markdown/13-vm-live-migration.md) | ⭐⭐⭐⭐ Expert | 30 min | Moves running VMs between nodes — zero downtime |
 | 14 | [VM Density Scaling](docs/tests/markdown/14-vm-density-scaling.md) | ⭐⭐⭐⭐ Expert | 30–90 min | Escalating VM counts to find the cluster ceiling — includes [Auto-Escalation: Set It and Forget It](docs/tests/markdown/14-vm-density-scaling.md#auto-escalation--set-it-and-forget-it) |
 | 15 | [VM Churn](docs/tests/markdown/15-vm-churn.md) | ⭐⭐⭐⭐ Expert | 20–60 min | Continuously creates and destroys VMs — endurance test |
+| 15b | [VM Churn — RHEL9](docs/tests/markdown/15b-vm-churn-rhel.md) | ⭐⭐⭐⭐ Expert | 30–90 min | RHEL 9 VM create/delete churn cycles — real-OS endurance test |
+| 15c | [VM Churn — Windows Server](docs/tests/markdown/15c-vm-churn-windows.md) | ⭐⭐⭐⭐⭐ Expert | 60–180 min | Windows Server 2022 churn cycles — VMware migration stress test |
 | 16 | [VM Pause/Unpause Storm](docs/tests/markdown/16-vm-pause-unpause.md) | ⭐⭐⭐ Advanced | 15 min | Pause/unpause all VMs simultaneously — QEMU state stress |
 | 17 | [VM Hot-plug Storage](docs/tests/markdown/17-vm-hotplug-storage.md) | ⭐⭐⭐⭐ Expert | 25 min | Attaches and detaches PVCs to running VMs |
 

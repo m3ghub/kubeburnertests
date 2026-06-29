@@ -1,0 +1,21 @@
+<mxfile host="app.diagrams.net" modified="2026-06-29T00:00:00Z" agent="kube-burner-docs" version="21.0.0" type="device">
+  <diagram id="test-09e" name="Test 09e: Windows Server 2022 Density Escalation (Set It and">
+    <mxGraphModel dx="1400" dy="300" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="ttl" value="Test 09e: Windows Server 2022 Density Escalation (Set It and Forget It)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="40" y="15" width="1320" height="28" as="geometry" /></mxCell>
+        <mxCell id="sub" value="3 automated rounds of Windows Server 2022 density - find your Windows ceiling" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5f6368;" vertex="1" parent="1"><mxGeometry x="40" y="46" width="1320" height="22" as="geometry" /></mxCell>
+        <mxCell id="kb" value="kube-burner Job&#xa;3 unattended rounds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1f3864;strokeColor=#1f3864;fontColor=#ffffff;fontSize=12;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="20" y="105" width="175" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="kb" target="r0"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r0" value="R1&#xa;3 Win VMs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#bf360c;fontSize=11;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="217" y="105" width="299" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="r0" target="r1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r1" value="R2&#xa;5 Win VMs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#bf360c;fontSize=11;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="538" y="105" width="299" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="r1" target="r2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="r2" value="R3&#xa;8 Win VMs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#bf360c;fontSize=11;fontStyle=1;arcSize=8;" vertex="1" parent="1"><mxGeometry x="859" y="105" width="299" height="80" as="geometry" /></mxCell>
+        <mxCell id="arr3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="r2" target="result"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="result" value="Windows&#xa;ceiling ✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1180" y="105" width="200" height="80" as="geometry" /></mxCell>
+        <mxCell id="meas" value="Measures: PVC clone time per round - Windows boot P99 - Storage throughput - Win ceiling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="20" y="230" width="1360" height="48" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

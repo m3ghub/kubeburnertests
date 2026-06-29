@@ -1,0 +1,60 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: mixed-rhel-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: mixed-fleet-escalation
+    vm-os: rhel
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: mixed-rhel-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+  template:
+    metadata:
+      labels:
+        app: mixed-fleet-escalation
+        vm-os: rhel
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: mixed-rhel-disk-{{.Iteration}}-{{.Replica}}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: mixed-rhel-{{.Iteration}}-{{.Replica}}
+              user: cloud-user
+              password: redhat123
+              chpasswd:
+                expire: false

@@ -1,0 +1,196 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Test 25a — Mixed VM Fleet Density Escalation (Set It and Forget It)</title><style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px}pre{background:#f4f4f4;padding:15px;border-radius:4px;overflow-x:auto}code{background:#f4f4f4;padding:2px 5px;border-radius:3px}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}</style></head><body>
+<h1>Test 25a — Mixed VM Fleet Density Escalation (Set It and Forget It)</h1>
+
+<p><strong>Category:</strong> OpenShift Virtualization — Mixed Windows + RHEL Fleet  <br>
+<strong>Namespace:</strong> <code>burner-mixed-escalation</code>  <br>
+<strong>Escalation:</strong> 5 → 10 → 20 → 30 → 50 VMs (70% Windows / 30% RHEL)  <br>
+<strong>Duration:</strong> ~120–240 min  <br>
+<strong>Difficulty:</strong> ⭐⭐⭐⭐⭐ Expert</p>
+
+<h2>What this test does</h2>
+
+<p>Automatically runs 5 escalating rounds with a mixed fleet of Windows Server 2022 and RHEL 9 VMs. Each round launches both OS types simultaneously, waits for all VMs to reach Running state, then deletes the entire fleet before the next round. Demonstrates real-world heterogeneous workload scheduling.</p>
+
+<blockquote><strong>Time warning:</strong> Each round requires cloning both Windows (60Gi each) and RHEL (30Gi each) PVCs. Round 5 clones ~2.3 Ti of storage. Allow 120 min per round on busy storage.</blockquote>
+
+<tr><td>Round</td><td>Windows VMs</td><td>RHEL VMs</td><td>Total</td><td>Max Wait</td></tr>
+<tr><td>-------</td><td>-------------</td><td>----------</td><td>-------</td><td>----------</td></tr>
+<tr><td>1</td><td>3</td><td>2</td><td>5</td><td>120 min</td></tr>
+<tr><td>2</td><td>7</td><td>3</td><td>10</td><td>120 min</td></tr>
+<tr><td>3</td><td>14</td><td>6</td><td>20</td><td>120 min</td></tr>
+<tr><td>4</td><td>21</td><td>9</td><td>30</td><td>120 min</td></tr>
+<tr><td>5</td><td>35</td><td>15</td><td>50</td><td>120 min</td></tr>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<li>OpenShift cluster with OpenShift Virtualization installed</li>
+<li><code>oc</code> CLI logged in with cluster-admin</li>
+<li>Both golden images available:</li>
+
+<pre><code>oc get pvc win2k22 -n openshift-virtualization-os-images
+oc get datasource rhel9 -n openshift-virtualization-os-images
+</code></pre>
+
+<li>Sufficient capacity: Round 5 needs 35 × 8Gi (Windows) + 15 × 2Gi (RHEL) = 310 Gi RAM total.</li>
+
+<hr>
+
+<h2>Step 1 — Namespace and RBAC</h2>
+
+<pre><code>oc new-project burner-mixed-escalation
+
+<p>oc create serviceaccount kube-burner -n burner-mixed-escalation</p>
+
+<p>oc create clusterrole kube-burner-virt \<br>
+  --verb=get,list,watch,create,delete,patch,update \<br>
+  --resource=virtualmachines,virtualmachineinstances,datavolumes,pods,namespaces,configmaps,jobs,events</p>
+
+<p>oc create clusterrolebinding kube-burner-virt-mixed-escalation \<br>
+  --clusterrole=kube-burner-virt \<br>
+  --serviceaccount=burner-mixed-escalation:kube-burner<br>
+</code></pre></p>
+
+<hr>
+
+<h2>Step 2 — Download config files</h2>
+
+<p><strong>Option A — Download from repo</strong></p>
+
+<pre><code>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/25a-vm-density-mixed-escalation"
+
+<p>curl -fsSL "$BASE/mixed-escalation-config.yml" -o /tmp/mixed-escalation-config.yml<br>
+curl -fsSL "$BASE/vm-template-windows.yml"      -o /tmp/vm-template-windows.yml<br>
+curl -fsSL "$BASE/vm-template-rhel.yml"         -o /tmp/vm-template-rhel.yml<br>
+</code></pre></p>
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+<p>For the VM templates and full config, see the <a href="https://github.com/m3ghub/kubeburnertests/tree/main/docs/tests/files/25a-vm-density-mixed-escalation/">repo</a>.</p>
+
+<p></details></p>
+
+<hr>
+
+<h2>Step 3 — Package into ConfigMap</h2>
+
+<pre><code>oc create configmap mixed-escalation-config \
+  --from-file=config.yml=/tmp/mixed-escalation-config.yml \
+  --from-file=vm-template-windows.yml=/tmp/vm-template-windows.yml \
+  --from-file=vm-template-rhel.yml=/tmp/vm-template-rhel.yml \
+  -n burner-mixed-escalation
+</code></pre>
+
+<hr>
+
+<h2>Step 4 — Launch the job</h2>
+
+<pre><code>cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-mixed-escalation
+  namespace: burner-mixed-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - mixed-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: mixed-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+</code></pre>
+
+<blockquote><strong>Re-run note:</strong> Change <code>--uuid mixed-escalation-001</code> to a new unique value on each run.</blockquote>
+
+<hr>
+
+<h2>Step 5 — Monitor</h2>
+
+<pre><code><h1>Watch job pod</h1>
+oc get pods -n burner-mixed-escalation -w
+
+<h1>Stream logs</h1>
+oc logs -f job/kb-mixed-escalation -n burner-mixed-escalation
+
+<h1>Watch DataVolumes (cloning is the bottleneck)</h1>
+watch -n15 'oc get dv -n burner-mixed-escalation | grep -v Succeeded | wc -l && echo "DVs still cloning"'
+
+<h1>Watch VMs by OS type</h1>
+watch -n15 'oc get vm -n burner-mixed-escalation -l vm-os=windows | wc -l && oc get vm -n burner-mixed-escalation -l vm-os=rhel | wc -l'
+</code></pre>
+
+<hr>
+
+<h2>Force-stop a stuck or failing round</h2>
+
+<pre><code>oc delete job kb-mixed-escalation -n burner-mixed-escalation
+
+<p>oc delete vm -l app=mixed-fleet-escalation -n burner-mixed-escalation --wait=false</p>
+
+<p>oc delete dv --all -n burner-mixed-escalation --wait=false</p>
+
+<p>oc get vm,dv -n burner-mixed-escalation -w<br>
+</code></pre></p>
+
+<hr>
+
+<h2>Cleanup</h2>
+
+<pre><code>oc delete job kb-mixed-escalation -n burner-mixed-escalation 2>/dev/null || true
+oc delete configmap mixed-escalation-config -n burner-mixed-escalation 2>/dev/null || true
+oc delete vm -l app=mixed-fleet-escalation -n burner-mixed-escalation --wait=false 2>/dev/null || true
+oc delete dv --all -n burner-mixed-escalation --wait=false 2>/dev/null || true
+oc delete project burner-mixed-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-mixed-escalation
+</code></pre>
+
+<hr>
+
+<h2>Troubleshooting</h2>
+
+<tr><td>Symptom</td><td>Cause</td><td>Fix</td></tr>
+<tr><td>---------</td><td>-------</td><td>-----</td></tr>
+<tr><td>Windows DV stuck</td><td>PVC clone source <code>win2k22</code> missing</td><td><code>oc get pvc -n openshift-virtualization-os-images</code></td></tr>
+<tr><td>RHEL DV stuck</td><td><code>rhel9</code> DataSource not Ready</td><td><code>oc get datasource rhel9 -n openshift-virtualization-os-images</code></td></tr>
+<tr><td>Scheduler pressure</td><td>Mixed large (8Gi) + small (2Gi) requests</td><td>Some Windows VMs may not schedule; reduce <code>replicas</code></td></tr>
+<tr><td>Delete round finds 0 VMs</td><td>Label selector issue</td><td>Ensure both templates have <code>app: mixed-fleet-escalation</code></td></tr>
+
+<hr>
+
+<h2>Related tests</h2>
+
+<li><a href="25-vm-density-mixed.md">25-vm-density-mixed.md</a> — Single-shot mixed density</li>
+<li><a href="23a-vm-density-rhel-escalation.md">23a-vm-density-rhel-escalation.md</a> — RHEL-only escalation</li>
+<li><a href="24a-vm-density-windows-escalation.md">24a-vm-density-windows-escalation.md</a> — Windows-only escalation</li>
+<li><a href="22-ocp-vmi-density-churn.md">22-ocp-vmi-density-churn.md</a> — Mixed churn (Windows + RHEL)</li>
+</body></html>

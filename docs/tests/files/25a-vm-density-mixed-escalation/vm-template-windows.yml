@@ -1,0 +1,56 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: mixed-win-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: mixed-fleet-escalation
+    vm-os: windows
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: mixed-win-disk-{{.Iteration}}-{{.Replica}}
+      spec:
+        source:
+          pvc:
+            namespace: openshift-virtualization-os-images
+            name: win2k22
+        storage:
+          resources:
+            requests:
+              storage: 60Gi
+  template:
+    metadata:
+      labels:
+        app: mixed-fleet-escalation
+        vm-os: windows
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        resources:
+          requests:
+            memory: 8Gi
+        features:
+          acpi: {}
+          apic: {}
+          hyperv:
+            relaxed: {}
+            vapic: {}
+            spinlocks:
+              spinlocks: 8191
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: mixed-win-disk-{{.Iteration}}-{{.Replica}}

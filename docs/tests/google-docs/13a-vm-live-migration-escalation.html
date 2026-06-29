@@ -1,0 +1,231 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Test 13a — VM Live Migration Escalation (Set It and Forget It)</title><style>body{font-family:Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px}pre{background:#f4f4f4;padding:15px;border-radius:4px;overflow-x:auto}code{background:#f4f4f4;padding:2px 5px;border-radius:3px}blockquote{border-left:4px solid #ccc;margin:0;padding-left:16px;color:#555}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px}</style></head><body>
+<h1>Test 13a — VM Live Migration Escalation (Set It and Forget It)</h1>
+
+<p><strong>Category:</strong> OpenShift Virtualization — Live Migration  <br>
+<strong>Namespace:</strong> <code>burner-migration-escalation</code>  <br>
+<strong>Escalation:</strong> 2 → 4 → 8 → 16 → 32 VMs  <br>
+<strong>Duration:</strong> ~45–90 min  <br>
+<strong>Difficulty:</strong> ⭐⭐⭐⭐ Expert</p>
+
+<h2>What this test does</h2>
+
+<p>Automatically runs 5 escalating rounds of live migration. Each round: creates VMs → starts them → migrates all VMs simultaneously → stops them → deletes them. Tests the <code>virt-migration-controller</code> under progressively increasing parallel migration load.</p>
+
+<tr><td>Round</td><td>VMs</td><td>Migration Pause</td><td>Max Wait</td></tr>
+<tr><td>-------</td><td>-----</td><td>-----------------</td><td>----------</td></tr>
+<tr><td>1</td><td>2</td><td>120 s</td><td>20 min</td></tr>
+<tr><td>2</td><td>4</td><td>180 s</td><td>20 min</td></tr>
+<tr><td>3</td><td>8</td><td>300 s</td><td>20 min</td></tr>
+<tr><td>4</td><td>16</td><td>480 s</td><td>20 min</td></tr>
+<tr><td>5</td><td>32</td><td>600 s</td><td>20 min</td></tr>
+
+<hr>
+
+<h2>Prerequisites</h2>
+
+<li>OpenShift cluster with OpenShift Virtualization installed</li>
+<li>At least 2 worker nodes (live migration requires a target node)</li>
+<li><code>oc</code> CLI logged in with cluster-admin</li>
+<li>Check migration policy: <code>oc get kubevirt -n openshift-cnv -o jsonpath='{.items[0].spec.configuration.migrations}'</code></li>
+
+<hr>
+
+<h2>Step 1 — Namespace and RBAC</h2>
+
+<pre><code>oc new-project burner-migration-escalation
+
+<p>oc create serviceaccount kube-burner -n burner-migration-escalation</p>
+
+<p>oc create clusterrole kube-burner-virt \<br>
+  --verb=get,list,watch,create,delete,patch,update \<br>
+  --resource=virtualmachines,virtualmachineinstances,virtualmachineinstancemigrations,pods,namespaces,configmaps,jobs,events</p>
+
+<p>oc create clusterrolebinding kube-burner-virt-mig-escalation \<br>
+  --clusterrole=kube-burner-virt \<br>
+  --serviceaccount=burner-migration-escalation:kube-burner<br>
+</code></pre></p>
+
+<hr>
+
+<h2>Step 2 — Download config files</h2>
+
+<p><strong>Option A — Download from repo</strong></p>
+
+<pre><code>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/13a-vm-live-migration-escalation"
+
+<p>curl -fsSL "$BASE/migration-escalation-config.yml" -o /tmp/migration-escalation-config.yml<br>
+curl -fsSL "$BASE/vm-template.yml"                 -o /tmp/vm-template.yml<br>
+</code></pre></p>
+
+<details>
+<summary>Option B — Manual paste</summary>
+
+<p>Create <code>/tmp/vm-template.yml</code>:</p>
+
+<pre><code>apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: mig-esc-{{.Iteration}}-{{.Replica}}
+  labels:
+    app: migration-escalation
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        app: migration-escalation
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        resources:
+          requests:
+            memory: 128Mi
+        devices:
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-registry-disk-demo:latest
+</code></pre>
+
+<p>For the full config, see the downloaded file or the <a href="https://github.com/m3ghub/kubeburnertests/blob/main/docs/tests/files/13a-vm-live-migration-escalation/migration-escalation-config.yml">repo</a>.</p>
+
+<p></details></p>
+
+<hr>
+
+<h2>Step 3 — Package into ConfigMap</h2>
+
+<pre><code>oc create configmap migration-escalation-config \
+  --from-file=config.yml=/tmp/migration-escalation-config.yml \
+  --from-file=vm-template.yml=/tmp/vm-template.yml \
+  -n burner-migration-escalation
+</code></pre>
+
+<hr>
+
+<h2>Step 4 — Launch the job</h2>
+
+<pre><code>cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-mig-escalation
+  namespace: burner-migration-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      initContainers:
+        - name: copy-config
+          image: busybox
+          command: ["sh","-c","cp /configmap/* /config/"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - mig-escalation-001
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: migration-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+</code></pre>
+
+<hr>
+
+<h2>Step 5 — Monitor</h2>
+
+<pre><code><h1>Watch job pod</h1>
+oc get pods -n burner-migration-escalation -w
+
+<h1>Stream logs</h1>
+oc logs -f job/kb-mig-escalation -n burner-migration-escalation
+
+<h1>Watch active migrations</h1>
+watch -n5 'oc get vmim -n burner-migration-escalation'
+</code></pre>
+
+<p><strong>Expected log output per round:</strong></p>
+
+<pre><code>time="..." level=info msg="Triggering job: r01-create" ...
+time="..." level=info msg="Triggering job: r01-start" ...
+time="..." level=info msg="Triggering job: r01-migrate" ...
+time="..." level=info msg="Triggering job: r01-stop" ...
+time="..." level=info msg="Triggering job: r01-delete" ...
+</code></pre>
+
+<hr>
+
+<h2>Force-stop a stuck or failing round</h2>
+
+<pre><code>oc delete job kb-mig-escalation -n burner-migration-escalation
+
+<h1>Stop running VMs first to allow deletion</h1>
+oc get vm -n burner-migration-escalation -o name | xargs -I{} oc patch {} \
+  -n burner-migration-escalation --type=merge -p '{"spec":{"running":false}}'
+
+<p>oc delete vm -l app=migration-escalation -n burner-migration-escalation --wait=false</p>
+
+<h1>Cancel any in-flight migrations</h1>
+oc delete vmim --all -n burner-migration-escalation
+</code></pre>
+
+<hr>
+
+<h2>Cleanup</h2>
+
+<pre><code>oc delete job kb-mig-escalation -n burner-migration-escalation 2>/dev/null || true
+oc delete configmap migration-escalation-config -n burner-migration-escalation 2>/dev/null || true
+oc get vm -n burner-migration-escalation -o name | xargs -I{} oc patch {} \
+  -n burner-migration-escalation --type=merge -p '{"spec":{"running":false}}'
+oc delete vm -l app=migration-escalation -n burner-migration-escalation --wait=false 2>/dev/null || true
+oc delete project burner-migration-escalation
+oc delete clusterrole kube-burner-virt
+oc delete clusterrolebinding kube-burner-virt-mig-escalation
+</code></pre>
+
+<hr>
+
+<h2>Troubleshooting</h2>
+
+<tr><td>Symptom</td><td>Cause</td><td>Fix</td></tr>
+<tr><td>---------</td><td>-------</td><td>-----</td></tr>
+<tr><td>Migration <code>Pending</code> forever</td><td>Only 1 worker node</td><td>Need 2+ nodes; check <code>oc get nodes</code></td></tr>
+<tr><td>Migration <code>Failed</code></td><td>VM memory too large for target</td><td>Reduce memory or check node capacity</td></tr>
+<tr><td>Job pod <code>Error</code></td><td>YAML issue</td><td><code>oc describe configmap migration-escalation-config</code></td></tr>
+<tr><td>VMs won't delete</td><td>Still <code>Running</code></td><td>Stop VMs first, then delete</td></tr>
+
+<hr>
+
+<h2>Related tests</h2>
+
+<li><a href="13-vm-live-migration.md">13-vm-live-migration.md</a> — Single-shot migration test</li>
+<li><a href="09a-kubevirt-density-escalation.md">09a-kubevirt-density-escalation.md</a> — CirrOS density escalation</li>
+</body></html>
