@@ -179,7 +179,6 @@ spec:
             namespace: openshift-virtualization-os-images
             name: win2k22
         storage:
-          storageClassName: ""
           accessModes:
             - ReadWriteOnce
           resources:

@@ -245,7 +245,6 @@ spec:
             namespace: openshift-virtualization-os-images
             name: win2k22
         storage:
-          storageClassName: ""       # Leave blank for cluster default
           accessModes:
             - ReadWriteOnce          # Windows does not support ReadWriteMany
           resources:

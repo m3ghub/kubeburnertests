@@ -321,7 +321,6 @@ spec:
           resources:
             requests:
               storage: 50Gi
-          storageClassName: ""
         source:
           pvc:
             namespace: openshift-virtualization-os-images

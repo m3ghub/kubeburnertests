@@ -150,7 +150,6 @@ spec:
           name: rhel9
           namespace: openshift-virtualization-os-images
         storage:
-          storageClassName: ""
           accessModes:
             - ReadWriteMany
           resources:
