@@ -58,7 +58,7 @@ curl -fsSL "$BASE/migration-escalation-config.yml" -o /tmp/migration-escalation-
 curl -fsSL "$BASE/vm-template.yml"                 -o /tmp/vm-template.yml
 ```
 
-<details>
+<details open>
 <summary>Option B — Manual paste</summary>
 
 Create `/tmp/vm-template.yml`:

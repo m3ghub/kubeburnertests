@@ -73,7 +73,7 @@ curl -fsSL "$BASE/windows-escalation-config.yml" -o /tmp/windows-escalation-conf
 curl -fsSL "$BASE/vm-template-windows.yml"        -o /tmp/vm-template-windows.yml
 ```
 
-<details>
+<details open>
 <summary>Option B — Manual paste</summary>
 
 Create `/tmp/vm-template-windows.yml`:

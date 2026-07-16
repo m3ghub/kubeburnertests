@@ -57,7 +57,7 @@ curl -fsSL "$BASE/cirros-escalation-config.yml" -o /tmp/cirros-escalation-config
 curl -fsSL "$BASE/vm-template.yml"              -o /tmp/vm-template.yml
 ```
 
-<details>
+<details open>
 <summary>Option B — Manual paste</summary>
 
 Create `/tmp/cirros-escalation-config.yml`:

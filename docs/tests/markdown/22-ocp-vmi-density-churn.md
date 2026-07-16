@@ -716,7 +716,7 @@ head -1 /tmp/vm-template-rhel.yml       # must print: apiVersion: kubevirt.io/v1
 
 If any line prints `404:` or `<!DOCTYPE`, the download failed — use Option B below.
 
-<details>
+<details open>
 <summary><strong>Option B — Paste manually (air-gapped / private repo)</strong></summary>
 
 Run these three paste blocks one at a time in the web terminal.

@@ -550,7 +550,7 @@ head -3 /tmp/test22b-churn-config.yml
 #   measurements:
 ```
 
-<details>
+<details open>
 <summary><strong>Option B — Paste manually (air-gapped / private repo)</strong></summary>
 
 ```bash

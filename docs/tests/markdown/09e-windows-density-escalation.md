@@ -129,7 +129,7 @@ head -2 /tmp/windows-escalation-vm.yml   # must start with: apiVersion: kubevirt
 head -2 /tmp/windows-escalation-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
 ```
 
-<details>
+<details open>
 <summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
 
 cat > /tmp/windows-escalation-vm.yml << 'EOF'

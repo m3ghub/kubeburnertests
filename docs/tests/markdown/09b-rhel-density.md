@@ -208,7 +208,7 @@ head -2 /tmp/rhel-density-vm.yml      # must start with: apiVersion: kubevirt.io
 head -2 /tmp/rhel-density-config.yml  # must start with: global:
 ```
 
-<details>
+<details open>
 <summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
 
 **File 1 — RHEL 9 VM template:**

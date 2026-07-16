@@ -128,7 +128,7 @@ head -2 /tmp/rhel-escalation-vm.yml   # must start with: apiVersion: kubevirt.io
 head -2 /tmp/rhel-escalation-config.yml   # must start with: apiVersion: kubevirt.io/v1 or global:
 ```
 
-<details>
+<details open>
 <summary><strong>Option B — Paste manually (air-gapped / private cluster)</strong></summary>
 
 cat > /tmp/rhel-escalation-vm.yml << 'EOF'

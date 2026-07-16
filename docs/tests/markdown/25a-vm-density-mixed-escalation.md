@@ -67,7 +67,7 @@ curl -fsSL "$BASE/vm-template-windows.yml"      -o /tmp/vm-template-windows.yml
 curl -fsSL "$BASE/vm-template-rhel.yml"         -o /tmp/vm-template-rhel.yml
 ```
 
-<details>
+<details open>
 <summary>Option B — Manual paste</summary>
 
 For the VM templates and full config, see the [repo](https://github.com/m3ghub/kubeburnertests/tree/main/docs/tests/files/25a-vm-density-mixed-escalation/).
