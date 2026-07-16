@@ -28,7 +28,7 @@ rhel9   73m   Ready   True    DataSource is ready to be consumed
   --serviceaccount=burner-rhel-density-escalation:kube-burner<br>
 </code></pre></p><hr><h2>Step 2 — Download config files</h2><p><strong>Option A — Download from repo</strong></p><pre><code>BASE="https://raw.githubusercontent.com/m3ghub/kubeburnertests/main/docs/tests/files/23a-vm-density-rhel-escalation"<p>curl -fsSL "$BASE/rhel-escalation-config.yml" -o /tmp/rhel-escalation-config.yml<br>
 curl -fsSL "$BASE/vm-template-rhel.yml"        -o /tmp/vm-template-rhel.yml<br>
-</code></pre><details>
+</code></pre><details open>
 <summary><strong>Option B — Manual paste</strong></summary><p>Create <code>/tmp/vm-template-rhel.yml</code>:</p><pre><code>apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:

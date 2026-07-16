@@ -164,6 +164,69 @@ EOF
 
 ---
 
+## Security — DISA STIG-hardened job manifest
+
+If your cluster enforces DISA STIG hardening (e.g. the `restricted-v2` SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 4 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level `securityContext` (non-root, `RuntimeDefault` seccomp profile) plus container-level `securityContext` (no privilege escalation, all capabilities dropped) on both the init container and the `kube-burner` container:
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-mig-escalation
+  namespace: burner-migration-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: copy-config
+          image: registry.redhat.io/ubi9/ubi-minimal:latest
+          command: ["sh","-c","cp /configmap/* /config/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - mig-escalation-001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: migration-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+```
+
+> **Note:** The init container image was swapped from `busybox` to `registry.redhat.io/ubi9/ubi-minimal:latest` since STIG-locked registries typically only permit signed Red Hat UBI images.
+
+---
+
 ## Step 5 — Monitor
 
 ```bash

@@ -271,6 +271,58 @@ EOF</code></pre>
 <p></p>
 <hr>
 <p></p>
+<h3>Security — DISA STIG-hardened job manifest</h3>
+<p></p>
+<p>If your cluster enforces DISA STIG hardening (e.g. the <code>restricted-v2</code> SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 6 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level <code>securityContext</code> (non-root, <code>RuntimeDefault</code> seccomp profile) plus container-level <code>securityContext</code> (no privilege escalation, all capabilities dropped) on every container in the Job.</p>
+<p></p>
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-create-pause-vms
+  namespace: burner-pause
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command: [sh, -c, "cp /config-src/* /config/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=pause-storm-001]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: vm-pause-config
+        - name: workdir
+          emptyDir: {}
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
 <h3>Step 7 — Launch Job 2: Pause/Unpause storm</h3>
 <p></p>
 <p>This Job calls the KubeVirt subresource API directly — the same endpoint <code>virtctl pause</code> uses — and runs two full pause/unpause cycles with timing output.</p>

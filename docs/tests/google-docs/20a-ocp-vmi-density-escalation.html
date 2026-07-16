@@ -159,6 +159,68 @@ EOF
 
 <hr>
 
+<h2>Security — DISA STIG-hardened job manifest</h2>
+
+<p>If your cluster enforces DISA STIG hardening (e.g. the <code>restricted-v2</code> SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 4 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level <code>securityContext</code> (non-root, <code>RuntimeDefault</code> seccomp profile) plus container-level <code>securityContext</code> (no privilege escalation, all capabilities dropped) on both the init container and the <code>kube-burner</code> container:</p>
+
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-vmi-escalation
+  namespace: burner-vmi-density-escalation
+spec:
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: copy-config
+          image: registry.redhat.io/ubi9/ubi-minimal:latest
+          command: ["sh","-c","cp /configmap/* /config/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: configmap-vol
+              mountPath: /configmap
+            - name: config-vol
+              mountPath: /config
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid
+            - vmi-escalation-001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+      volumes:
+        - name: configmap-vol
+          configMap:
+            name: vmi-escalation-config
+        - name: config-vol
+          emptyDir: {}
+      restartPolicy: Never
+EOF
+</code></pre>
+
+<blockquote><strong>Note:</strong> The init container image was swapped from <code>busybox</code> to <code>registry.redhat.io/ubi9/ubi-minimal:latest</code> since STIG-locked registries typically only permit signed Red Hat UBI images.</blockquote>
+
+<hr>
+
 <h2>Step 5 — Monitor</h2>
 
 <pre><code><h1>Watch job pod</h1>

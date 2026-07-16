@@ -180,6 +180,41 @@ spec:
 EOF
 `
 
+Security — DISA STIG-hardened job manifest
+
+If your cluster enforces DISA STIG hardening (e.g. the restricted-v2 SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 3 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level securityContext (non-root, RuntimeDefault seccomp profile) plus container-level securityContext (no privilege escalation, all capabilities dropped) on the kube-burner container:
+
+`bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-health-check
+  namespace: burner-health
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          workingDir: /tmp
+          command:
+            - kube-burner
+            - health-check
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+EOF
+`
+
 Step 4 — Read the result
 
 `bash

@@ -415,6 +415,60 @@ EOF
 
 ---
 
+## Security — DISA STIG-hardened job manifest
+
+If your cluster enforces DISA STIG hardening (e.g. the `restricted-v2` SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the standard job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level `securityContext` (non-root, `RuntimeDefault` seccomp profile) plus container-level `securityContext` (no privilege escalation, all capabilities dropped) on every container in the Job.
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-windows-escalation
+  namespace: burner-windows-escalation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          command: [sh, -c, "cp /config-src/* /config/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.6.1
+          workingDir: /config
+          command: [kube-burner, init, -c, /config/config.yml, --uuid=windows-escalation-001]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: windows-escalation-config
+        - name: workdir
+          emptyDir: {}
+EOF
+```
+
+---
+
 ## Step 6 — Monitor (walk away)
 
 ```bash

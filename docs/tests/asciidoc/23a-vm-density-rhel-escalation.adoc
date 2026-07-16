@@ -79,7 +79,7 @@ curl -fsSL "$BASE/rhel-escalation-config.yml" -o /tmp/rhel-escalation-config.yml
 curl -fsSL "$BASE/vm-template-rhel.yml"        -o /tmp/vm-template-rhel.yml
 ----
 
-<details>
+<details open>
 <summary><strong>Option B — Manual paste</strong></summary>
 
 Create `/tmp/vm-template-rhel.yml`:

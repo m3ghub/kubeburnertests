@@ -204,6 +204,63 @@ EOF</code></pre>
 <pre><code>
 ---
 
+### Security — DISA STIG-hardened job manifest
+
+If your cluster enforces DISA STIG hardening (e.g. the restricted-v2 SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 5 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level securityContext (non-root, RuntimeDefault seccomp profile) plus container-level securityContext (no privilege escalation, all capabilities dropped) on both the init container and the kube-burner container:
+</code></pre>
+<p>cat <<'EOF' | oc apply -f -</p>
+<p>apiVersion: batch/v1</p>
+<p>kind: Job</p>
+<p>metadata:</p>
+<p>  name: kb-pod-density</p>
+<p>  namespace: burner-pod-density</p>
+<p>spec:</p>
+<p>  backoffLimit: 0</p>
+<p>  template:</p>
+<p>    spec:</p>
+<p>      serviceAccountName: kube-burner</p>
+<p>      securityContext:</p>
+<p>        runAsNonRoot: true</p>
+<p>        seccompProfile:</p>
+<p>          type: RuntimeDefault</p>
+<p>      restartPolicy: Never</p>
+<p>      initContainers:</p>
+<p>        - name: copy-config</p>
+<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
+<p>          command: [sh, -c, "cp /config-src/* /config/"]</p>
+<p>          securityContext:</p>
+<p>            allowPrivilegeEscalation: false</p>
+<p>            capabilities:</p>
+<p>              drop: ["ALL"]</p>
+<p>          volumeMounts:</p>
+<p>            - {name: config-src, mountPath: /config-src}</p>
+<p>            - {name: workdir,    mountPath: /config}</p>
+<p>      containers:</p>
+<p>        - name: kube-burner</p>
+<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
+<p>          workingDir: /config</p>
+<p>          command:</p>
+<p>            - kube-burner</p>
+<p>            - init</p>
+<p>            - -c</p>
+<p>            - /config/config.yml</p>
+<p>            - --uuid=pod-density-test-001</p>
+<p>          securityContext:</p>
+<p>            allowPrivilegeEscalation: false</p>
+<p>            capabilities:</p>
+<p>              drop: ["ALL"]</p>
+<p>          volumeMounts:</p>
+<p>            - {name: workdir, mountPath: /config}</p>
+<p>      volumes:</p>
+<p>        - name: config-src</p>
+<p>          configMap:</p>
+<p>            name: pod-density-config</p>
+<p>        - name: workdir</p>
+<p>          emptyDir: {}</p>
+<p>EOF</p>
+<pre><code>
+---
+
 ### Step 6 — Watch it run
 
 Open a **second terminal** and watch the pods being created:
