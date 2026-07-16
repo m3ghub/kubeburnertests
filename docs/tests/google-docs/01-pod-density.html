@@ -156,151 +156,174 @@ EOF</code></pre>
   --from-file=config.yml=/tmp/pod-density-config.yml \
   --from-file=pod.yml=/tmp/pod.yml \
   -n burner-pod-density</code></pre>
-<p>  --from-file=pod.yml=pod.yml \</p>
-<p>  -n burner-pod-density</p>
-<pre><code>
----
-
-### Step 5 — Run the test!
-</code></pre>
-<p>cat <<'EOF' | oc apply -f -</p>
-<p>apiVersion: batch/v1</p>
-<p>kind: Job</p>
-<p>metadata:</p>
-<p>  name: kb-pod-density</p>
-<p>  namespace: burner-pod-density</p>
-<p>spec:</p>
-<p>  backoffLimit: 0</p>
-<p>  template:</p>
-<p>    spec:</p>
-<p>      serviceAccountName: kube-burner</p>
-<p>      restartPolicy: Never</p>
-<p>      initContainers:</p>
-<p>        - name: copy-config</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
-<p>          command: [sh, -c, "cp /config-src/* /config/"]</p>
-<p>          volumeMounts:</p>
-<p>            - {name: config-src, mountPath: /config-src}</p>
-<p>            - {name: workdir,    mountPath: /config}</p>
-<p>      containers:</p>
-<p>        - name: kube-burner</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
-<p>          workingDir: /config</p>
-<p>          command:</p>
-<p>            - kube-burner</p>
-<p>            - init</p>
-<p>            - -c</p>
-<p>            - /config/config.yml</p>
-<p>            - --uuid=pod-density-test-001</p>
-<p>          volumeMounts:</p>
-<p>            - {name: workdir, mountPath: /config}</p>
-<p>      volumes:</p>
-<p>        - name: config-src</p>
-<p>          configMap:</p>
-<p>            name: pod-density-config</p>
-<p>        - name: workdir</p>
-<p>          emptyDir: {}</p>
-<p>EOF</p>
-<pre><code>
----
-
-### Security — DISA STIG-hardened job manifest
-
-If your cluster enforces DISA STIG hardening (e.g. the restricted-v2 SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 5 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level securityContext (non-root, RuntimeDefault seccomp profile) plus container-level securityContext (no privilege escalation, all capabilities dropped) on both the init container and the kube-burner container:
-</code></pre>
-<p>cat <<'EOF' | oc apply -f -</p>
-<p>apiVersion: batch/v1</p>
-<p>kind: Job</p>
-<p>metadata:</p>
-<p>  name: kb-pod-density</p>
-<p>  namespace: burner-pod-density</p>
-<p>spec:</p>
-<p>  backoffLimit: 0</p>
-<p>  template:</p>
-<p>    spec:</p>
-<p>      serviceAccountName: kube-burner</p>
-<p>      securityContext:</p>
-<p>        runAsNonRoot: true</p>
-<p>        seccompProfile:</p>
-<p>          type: RuntimeDefault</p>
-<p>      restartPolicy: Never</p>
-<p>      initContainers:</p>
-<p>        - name: copy-config</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
-<p>          command: [sh, -c, "cp /config-src/* /config/"]</p>
-<p>          securityContext:</p>
-<p>            allowPrivilegeEscalation: false</p>
-<p>            capabilities:</p>
-<p>              drop: ["ALL"]</p>
-<p>          volumeMounts:</p>
-<p>            - {name: config-src, mountPath: /config-src}</p>
-<p>            - {name: workdir,    mountPath: /config}</p>
-<p>      containers:</p>
-<p>        - name: kube-burner</p>
-<p>          image: quay.io/kube-burner/kube-burner:v2.7.3</p>
-<p>          workingDir: /config</p>
-<p>          command:</p>
-<p>            - kube-burner</p>
-<p>            - init</p>
-<p>            - -c</p>
-<p>            - /config/config.yml</p>
-<p>            - --uuid=pod-density-test-001</p>
-<p>          securityContext:</p>
-<p>            allowPrivilegeEscalation: false</p>
-<p>            capabilities:</p>
-<p>              drop: ["ALL"]</p>
-<p>          volumeMounts:</p>
-<p>            - {name: workdir, mountPath: /config}</p>
-<p>      volumes:</p>
-<p>        - name: config-src</p>
-<p>          configMap:</p>
-<p>            name: pod-density-config</p>
-<p>        - name: workdir</p>
-<p>          emptyDir: {}</p>
-<p>EOF</p>
-<pre><code>
----
-
-### Step 6 — Watch it run
-
-Open a **second terminal** and watch the pods being created:
-</code></pre>
-<p>oc get pods -n burner-pod-density -w</p>
-<pre><code>
-In your **first terminal**, stream the kube-burner logs:
-</code></pre>
-<p>oc logs -f job/kb-pod-density -n burner-pod-density</p>
-<pre><code>
----
-
-### Step 7 — Read the results 🎉
-
-When the test finishes you will see something like this:
-</code></pre>
-<p>time="..." level=info msg="Triggering job: pod-density"</p>
-<p>time="..." level=info msg="burner-pod-density: 50/50 pods ready"</p>
-<p>time="..." level=info msg="pod-density: PodScheduled    50th: 0ms    99th: 500ms    max: 800ms"</p>
-<p>time="..." level=info msg="pod-density: ContainersReady 50th: 1500ms  99th: 2200ms   max: 2400ms"</p>
-<p>time="..." level=info msg="pod-density: Ready           50th: 1500ms  99th: 2200ms   max: 2400ms"</p>
-<p>time="..." level=info msg="Finished execution. UUID: pod-density-test-001"</p>
-<pre><code>
-**How to read these numbers:**
-
-| Number | Meaning |
-|---|---|
-| `50th: 1500ms` | Half of the pods were ready in under 1.5 seconds |
-| `99th: 2200ms` | 99 out of 100 pods were ready in under 2.2 seconds |
-| `max: 2400ms` | The very slowest pod took 2.4 seconds |
-
-**Good results on a healthy cluster:**
-- `PodScheduled 99th` under **1 second**
-- `Ready 99th` under **5 seconds**
-
----
-
-### Step 8 — Clean up
-</code></pre>
-<p>oc delete job kb-pod-density -n burner-pod-density</p>
-<p>oc delete configmap pod-density-config -n burner-pod-density</p>
-<p>oc delete project burner-pod-density</p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 5 — Run the test!</h3>
+<p></p>
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-pod-density
+  namespace: burner-pod-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command: [sh, -c, "cp /config-src/* /config/"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=pod-density-test-001
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: pod-density-config
+        - name: workdir
+          emptyDir: {}
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Security — DISA STIG-hardened job manifest</h3>
+<p></p>
+<p>If your cluster enforces DISA STIG hardening (e.g. the <code>restricted-v2</code> SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 5 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level <code>securityContext</code> (non-root, <code>RuntimeDefault</code> seccomp profile) plus container-level <code>securityContext</code> (no privilege escalation, all capabilities dropped) on both the init container and the <code>kube-burner</code> container:</p>
+<p></p>
+<pre><code>cat &lt;&lt;'EOF' | oc apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-pod-density
+  namespace: burner-pod-density
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: kube-burner
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      restartPolicy: Never
+      initContainers:
+        - name: copy-config
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          command: [sh, -c, "cp /config-src/* /config/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: config-src, mountPath: /config-src}
+            - {name: workdir,    mountPath: /config}
+      containers:
+        - name: kube-burner
+          image: quay.io/kube-burner/kube-burner:v2.7.3
+          workingDir: /config
+          command:
+            - kube-burner
+            - init
+            - -c
+            - /config/config.yml
+            - --uuid=pod-density-test-001
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - {name: workdir, mountPath: /config}
+      volumes:
+        - name: config-src
+          configMap:
+            name: pod-density-config
+        - name: workdir
+          emptyDir: {}
+EOF</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 6 — Watch it run</h3>
+<p></p>
+<p>Open a <strong>second terminal</strong> and watch the pods being created:</p>
+<p></p>
+<pre><code>oc get pods -n burner-pod-density -w</code></pre>
+<p></p>
+<p>In your <strong>first terminal</strong>, stream the kube-burner logs:</p>
+<p></p>
+<pre><code>oc logs -f job/kb-pod-density -n burner-pod-density</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 7 — Read the results 🎉</h3>
+<p></p>
+<p>When the test finishes you will see something like this:</p>
+<p></p>
+<pre><code>time="..." level=info msg="Triggering job: pod-density"
+time="..." level=info msg="burner-pod-density: 50/50 pods ready"
+time="..." level=info msg="pod-density: PodScheduled    50th: 0ms    99th: 500ms    max: 800ms"
+time="..." level=info msg="pod-density: ContainersReady 50th: 1500ms  99th: 2200ms   max: 2400ms"
+time="..." level=info msg="pod-density: Ready           50th: 1500ms  99th: 2200ms   max: 2400ms"
+time="..." level=info msg="Finished execution. UUID: pod-density-test-001"</code></pre>
+<p></p>
+<p><strong>How to read these numbers:</strong></p>
+<p></p>
+<tr><td>Number</td><td>Meaning</td></tr>
+<tr><td><code>50th: 1500ms</code></td><td>Half of the pods were ready in under 1.5 seconds</td></tr>
+<tr><td><code>99th: 2200ms</code></td><td>99 out of 100 pods were ready in under 2.2 seconds</td></tr>
+<tr><td><code>max: 2400ms</code></td><td>The very slowest pod took 2.4 seconds</td></tr>
+<p></p>
+<p><strong>Good results on a healthy cluster:</strong></p>
+<p>- <code>PodScheduled 99th</code> under <strong>1 second</strong></p>
+<p>- <code>Ready 99th</code> under <strong>5 seconds</strong></p>
+<p></p>
+<hr>
+<p></p>
+<h3>Step 8 — Clean up</h3>
+<p></p>
+<pre><code>oc delete job kb-pod-density -n burner-pod-density
+oc delete configmap pod-density-config -n burner-pod-density
+oc delete project burner-pod-density</code></pre>
+<p></p>
+<hr>
+<p></p>
+<h2>Troubleshooting</h2>
+<p></p>
+<tr><td>Problem</td><td>What it means</td><td>Fix</td></tr>
+<tr><td>Pods stuck in <code>Pending</code> for a long time</td><td>Not enough resources on nodes</td><td>Reduce <code>replicas</code> from 50 to 10</td></tr>
+<tr><td><code>permission denied</code> in logs</td><td>Log file write error</td><td>Check that <code>initContainer</code> copied config to <code>emptyDir</code></td></tr>
+<tr><td><code>events is forbidden</code></td><td>RBAC missing events access</td><td>Re-apply <code>examples/ocp-rbac.yaml</code></td></tr>
+<tr><td><code>Too many pods</code> on SNO</td><td>250-pod node limit</td><td>Reduce <code>replicas</code> to 10-15 max</td></tr>
+<tr><td>Test completes but numbers seem high</td><td>Nodes are under heavy load</td><td>Run when cluster is quiet</td></tr>
+<p></p>
+<hr>
+<p></p>
+<h2>Try it yourself — challenge 🏆</h2>
+<p></p>
+<p>Once the basic test works, try changing the number of pods and see how it affects the results:</p>
+<p></p>
+<p>1. Change <code>replicas: 50</code> to <code>replicas: 100</code> — does it get slower?</p>
+<p>2. Change <code>qps: 20</code> to <code>qps: 5</code> — does spreading the creation over more time help?</p>
+<p>3. Run the test twice in a row — are the results consistent?</p>
+<p></p>
+<hr>
+<p></p>
+<p><em>Next test: <a href="02-node-density.md">02 — Node Density</a> — test how many Deployments your nodes can handle</em></p>
+<p></p>
 </body></html>

@@ -168,9 +168,6 @@ oc create configmap pod-density-config \
   --from-file=pod.yml=/tmp/pod.yml \
   -n burner-pod-density
 ```
-  --from-file=pod.yml=pod.yml \
-  -n burner-pod-density
-```
 
 ---
 

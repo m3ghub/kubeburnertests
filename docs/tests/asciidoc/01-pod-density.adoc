@@ -179,15 +179,13 @@ oc create configmap pod-density-config \
   --from-file=pod.yml=/tmp/pod.yml \
   -n burner-pod-density
 ----
-  --from-file=pod.yml=pod.yml \
-  -n burner-pod-density
+
+'''
+
+=== Step 5 — Run the test!
+
+[source,bash]
 ----
-
----
-
-### Step 5 — Run the test!
-
-```bash
 cat <<'EOF' | oc apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -228,13 +226,14 @@ spec:
 EOF
 ----
 
----
+'''
 
-### Security — DISA STIG-hardened job manifest
+=== Security — DISA STIG-hardened job manifest
 
 If your cluster enforces DISA STIG hardening (e.g. the `restricted-v2` SCC, a compliance-operator profile, or an admission policy requiring non-root containers and no Linux capabilities), the Step 5 job manifest above may fail admission. Use this hardened variant instead — it adds a pod-level `securityContext` (non-root, `RuntimeDefault` seccomp profile) plus container-level `securityContext` (no privilege escalation, all capabilities dropped) on both the init container and the `kube-burner` container:
 
-```bash
+[source,bash]
+----
 cat <<'EOF' | oc apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -285,7 +284,7 @@ spec:
         - name: workdir
           emptyDir: {}
 EOF
-```
+----
 
 '''
 
