@@ -221,7 +221,6 @@ spec:
           name: rhel9
           namespace: openshift-virtualization-os-images
         storage:
-          storageClassName: ""       # Leave blank to use cluster default
           accessModes:
             - ReadWriteMany          # ReadWriteMany enables live migration
           resources:
@@ -270,7 +269,7 @@ spec:
 EOF
 </code></pre>
 
-<blockquote><strong><code>storageClassName: ""</code></strong> — leave blank to use your cluster's default storage class. To use a specific class, replace <code>""</code> with the class name from <code>oc get storageclass</code>.</blockquote>
+<blockquote><strong>No <code>storageClassName</code> set:</strong> omitting the field lets the DataVolumeTemplate use your cluster's default StorageClass automatically. Do <strong>not</strong> set <code>storageClassName: ""</code> — that explicitly disables dynamic provisioning and requires a pre-existing PV, which causes <code>no persistent volumes available for this claim and no storage class is set</code>. Only add <code>storageClassName: &lt;name&gt;</code> here if you need a specific non-default class (check available classes with <code>oc get storageclass</code>).</blockquote>
 
 <p><strong>File 2 — Main config:</strong></p>
 

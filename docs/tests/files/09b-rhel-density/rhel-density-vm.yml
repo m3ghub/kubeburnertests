@@ -16,7 +16,6 @@ spec:
           name: rhel9
           namespace: openshift-virtualization-os-images
         storage:
-          storageClassName: ""       # Leave blank to use cluster default
           accessModes:
             - ReadWriteMany          # ReadWriteMany enables live migration
           resources:
